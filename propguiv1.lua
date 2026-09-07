@@ -1,9 +1,7 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- Ultra-compact for mobile: 320x420 / 280x380
--- Fixed prop detection to match your original script
+-- Fixed: minimize toggles, full-screen toggle, aura follows player, props work
 
 local AllAuraConfigs = {
-    -- Common Auras
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
     FreshBreeze = { name = "Fresh Breeze", speed = 0.7, radius = 14, offsetY = 2, rotation = 15, type = "circle", color = "🟢" },
     CalmRing = { name = "Calm Ring", speed = 0.3, radius = 10, offsetY = 1, rotation = 0, type = "circle", color = "🟢" },
@@ -24,7 +22,6 @@ local AllAuraConfigs = {
     DreamRing = { name = "Dream Ring", speed = 0.3, radius = 14, offsetY = 0, rotation = 0, type = "double", color = "🟢" },
     PureHalo = { name = "Pure Halo", speed = 0.4, radius = 12, offsetY = 3, rotation = 0, type = "circle", color = "🟢" },
     SkyBloom = { name = "Sky Bloom", speed = 0.6, radius = 18, offsetY = 5, rotation = 8, type = "circle", color = "🟢" },
-    -- Uncommon Auras
     AquaOrbit = { name = "Aqua Orbit", speed = 0.7, radius = 13, offsetY = 1, rotation = 5, type = "circle", color = "🔵" },
     FrostRing = { name = "Frost Ring", speed = 0.4, radius = 11, offsetY = 0, rotation = 0, type = "circle", color = "🔵" },
     CrystalWave = { name = "Crystal Wave", speed = 0.9, radius = 14, offsetY = 2, rotation = 0, type = "wave", color = "🔵" },
@@ -45,7 +42,6 @@ local AllAuraConfigs = {
     TidalWave = { name = "Tidal Wave", speed = 0.5, radius = 18, offsetY = 3, rotation = 0, type = "wave", color = "🔵" },
     WinterBloom = { name = "Winter Bloom", speed = 0.4, radius = 14, offsetY = 2, rotation = 8, type = "circle", color = "🔵" },
     ArcticRing = { name = "Arctic Ring", speed = 0.3, radius = 16, offsetY = 5, rotation = 0, type = "double", color = "🔵" },
-    -- Rare Auras
     MysticSpiral = { name = "Mystic Spiral", speed = 0.8, radius = 14, offsetY = 2, rotation = 10, type = "spiral", color = "🟣" },
     PhantomRing = { name = "Phantom Ring", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "double", color = "🟣" },
     ArcaneOrbit = { name = "Arcane Orbit", speed = 0.7, radius = 15, offsetY = 1, rotation = 8, type = "circle", color = "🟣" },
@@ -66,7 +62,6 @@ local AllAuraConfigs = {
     SoulSpiral = { name = "Soul Spiral", speed = 0.5, radius = 19, offsetY = 3, rotation = 6, type = "spiral", color = "🟣" },
     ArcaneBloom = { name = "Arcane Bloom", speed = 0.6, radius = 16, offsetY = 2, rotation = 9, type = "star", color = "🟣" },
     Dreamveil = { name = "Dreamveil", speed = 0.4, radius = 14, offsetY = 4, rotation = 0, type = "double", color = "🟣" },
-    -- Epic Auras
     SolarCrown = { name = "Solar Crown", speed = 0.6, radius = 15, offsetY = 3, rotation = 0, type = "double", color = "🟠" },
     LunarCrown = { name = "Lunar Crown", speed = 0.4, radius = 14, offsetY = 2, rotation = 10, type = "double", color = "🟠" },
     ThunderRing = { name = "Thunder Ring", speed = 1.2, radius = 13, offsetY = 0, rotation = 5, type = "wave", color = "🟠" },
@@ -87,7 +82,6 @@ local AllAuraConfigs = {
     Starstorm = { name = "Starstorm", speed = 1.1, radius = 12, offsetY = 2, rotation = 6, type = "star", color = "🟠" },
     SupernovaHalo = { name = "Supernova Halo", speed = 0.7, radius = 20, offsetY = 3, rotation = 8, type = "wave", color = "🟠" },
     CelestialOrbit = { name = "Celestial Orbit", speed = 0.5, radius = 16, offsetY = 2, rotation = 12, type = "circle", color = "🟠" },
-    -- Legendary Auras
     EclipseCrown = { name = "Eclipse Crown", speed = 0.5, radius = 16, offsetY = 4, rotation = 8, type = "double", color = "🔴" },
     VoidSpiral = { name = "Void Spiral", speed = 1.0, radius = 14, offsetY = 1, rotation = 12, type = "spiral", color = "🔴" },
     InfinityRing = { name = "Infinity Ring", speed = 0.4, radius = 13, offsetY = 0, rotation = 0, type = "double", color = "🔴" },
@@ -108,7 +102,6 @@ local AllAuraConfigs = {
     RealityHalo = { name = "Reality Halo", speed = 0.4, radius = 16, offsetY = 4, rotation = 0, type = "circle", color = "🔴" },
     InfiniteSpiral = { name = "Infinite Spiral", speed = 0.9, radius = 18, offsetY = 1, rotation = 15, type = "spiral", color = "🔴" },
     EternalBloom = { name = "Eternal Bloom", speed = 0.5, radius = 17, offsetY = 3, rotation = 8, type = "star", color = "🔴" },
-    -- Mythic Auras
     ChaosCrown = { name = "Chaos Crown", speed = 0.8, radius = 18, offsetY = 4, rotation = 12, type = "double", color = "🟡" },
     AbyssOrbit = { name = "Abyss Orbit", speed = 0.6, radius = 16, offsetY = 2, rotation = 8, type = "circle", color = "🟡" },
     OblivionRing = { name = "Oblivion Ring", speed = 0.5, radius = 14, offsetY = 0, rotation = 0, type = "double", color = "🟡" },
@@ -129,7 +122,6 @@ local AllAuraConfigs = {
     OblivionHalo = { name = "Oblivion Halo", speed = 0.5, radius = 18, offsetY = 2, rotation = 8, type = "circle", color = "🟡" },
     ZeroPoint = { name = "Zero Point", speed = 0.3, radius = 14, offsetY = 0, rotation = 5, type = "wave", color = "🟡" },
     FinalEclipse = { name = "Final Eclipse", speed = 0.7, radius = 22, offsetY = 3, rotation = 12, type = "double", color = "🟡" },
-    -- Secret Auras
     NOVA15 = { name = "NOVA-15", speed = 1.5, radius = 20, offsetY = 3, rotation = 15, type = "double", color = "💠" },
     Fifteenfold = { name = "Fifteenfold", speed = 0.8, radius = 18, offsetY = 2, rotation = 10, type = "spiral", color = "💠" },
     Prophecy = { name = "Prophecy", speed = 0.6, radius = 16, offsetY = 4, rotation = 8, type = "star", color = "💠" },
@@ -159,21 +151,17 @@ local centerPosition = nil
 local propFolder = nil
 local totalProps = 0
 
--- Fixed prop detection (exactly matching your original script)
+-- Prop detection (exact match to your script)
 local function findProps()
     propList = {}
     local player = game.Players.LocalPlayer
 
-    -- Try exact path first
     local folder = workspace:FindFirstChild("WorkspaceCom")
-    if folder then
-        folder = folder:FindFirstChild("001_TrafficCones")
-    end
+    if folder then folder = folder:FindFirstChild("001_TrafficCones") end
 
     if folder then
         propFolder = folder
     else
-        -- fallback search
         for _, child in ipairs(workspace:GetDescendants()) do
             if child:IsA("Folder") and (child.Name:lower():find("prop") or child.Name:lower():find("cone") or child.Name:lower():find("traffic")) then
                 propFolder = child
@@ -182,11 +170,8 @@ local function findProps()
         end
     end
 
-    if not propFolder then
-        return false
-    end
+    if not propFolder then return false end
 
-    -- Collect props: first try to match player name
     local playerName = player.Name
     local foundAny = false
     for _, v in pairs(propFolder:GetChildren()) do
@@ -198,7 +183,6 @@ local function findProps()
         end
     end
 
-    -- If none match, take all props
     if not foundAny then
         for _, v in pairs(propFolder:GetChildren()) do
             if v:IsA("BasePart") or v:IsA("Model") then
@@ -207,15 +191,11 @@ local function findProps()
         end
     end
 
-    if #propList < 15 then
-        return false
-    end
-
+    if #propList < 15 then return false end
     totalProps = (#propList >= 25) and 25 or 15
     return true
 end
 
--- Animation function with proper SetCurrentCFrame handling
 local function runAuraAnimation(config)
     if auraRunning then return end
     auraRunning = true
@@ -270,7 +250,6 @@ local function runAuraAnimation(config)
                     local newPos = centerPosition + Vector3.new(x, y, z)
                     local lookAt = CFrame.new(newPos, centerPosition)
 
-                    -- Use InvokeServer if available, otherwise set CFrame directly
                     pcall(function()
                         local setCF = prop:FindFirstChild("SetCurrentCFrame")
                         if setCF then
@@ -302,9 +281,7 @@ local function startAura(auraKey)
         return
     end
     local config = AllAuraConfigs[auraKey]
-    if not config then
-        return
-    end
+    if not config then return end
     if totalProps < 15 then
         print("Not enough props!")
         return
@@ -318,7 +295,7 @@ local function startAura(auraKey)
     print(config.color .. " " .. config.name .. " activated with " .. totalProps .. " props")
 end
 
--- Try to load Fluent
+-- GUI handling
 local UseFluent = false
 local Fluent = nil
 for attempt = 1, 3 do
@@ -333,6 +310,9 @@ for attempt = 1, 3 do
     task.wait(1)
 end
 
+local guiVisible = true
+local isFull = false
+
 if UseFluent and Fluent then
     local SaveManager, InterfaceManager
     pcall(function()
@@ -340,16 +320,27 @@ if UseFluent and Fluent then
         InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
     end)
 
+    local compactSize = UDim2.fromOffset(340, 440)
+    local fullSize = UDim2.fromOffset(480, 560)
+
     local Window = Fluent:CreateWindow({
         Title = "MANI PROP GUI",
         SubTitle = "v1",
         TabWidth = 100,
-        Size = UDim2.fromOffset(320, 420),
+        Size = compactSize,
         Acrylic = true,
         Theme = "Dark",
         MinimizeKey = Enum.KeyCode.LeftControl
     })
 
+    -- Override minimize: toggle visibility instead of destroy
+    local oldMinimize = Window.Minimize
+    Window.Minimize = function()
+        guiVisible = not guiVisible
+        Window.Visible = guiVisible
+    end
+
+    -- Add full-screen toggle button in settings
     local Tabs = {
         C = Window:AddTab({ Title = "🟢", Icon = "sparkles" }),
         U = Window:AddTab({ Title = "🔵", Icon = "gem" }),
@@ -370,9 +361,7 @@ if UseFluent and Fluent then
                     tab:AddButton({
                         Title = config.name,
                         Description = "",
-                        Callback = function()
-                            startAura(key)
-                        end
+                        Callback = function() startAura(key) end
                     })
                 end
             end
@@ -395,10 +384,12 @@ if UseFluent and Fluent then
     buildAuraButtons(Tabs.M, mythicList, "🌟 Mythic")
     buildAuraButtons(Tabs.S, secretList, "💠 Secret")
 
-    -- Controls in each tab
     local function addControls(tab)
         tab:AddParagraph({ Title = "🎮", Content = "" })
-        tab:AddButton({ Title = "⏹️Stop", Description = "", Callback = function() stopAura() Fluent:Notify({Title="Stopped", Content="Aura stopped", Duration=2}) end })
+        tab:AddButton({ Title = "⏹️Stop", Description = "", Callback = function()
+            stopAura()
+            if Fluent then Fluent:Notify({Title="Stopped", Content="Aura stopped", Duration=2}) end
+        end })
         tab:AddButton({ Title = "🔄Reset", Description = "", Callback = function()
             stopAura()
             if findProps() then
@@ -412,13 +403,13 @@ if UseFluent and Fluent then
                         else prop.CFrame = CFrame.new(hrp.Position) end
                     end)
                 end
-                Fluent:Notify({Title="Reset", Content="Props reset", Duration=2})
+                if Fluent then Fluent:Notify({Title="Reset", Content="Props reset", Duration=2}) end
             end
         end })
     end
     addControls(Tabs.C); addControls(Tabs.U); addControls(Tabs.R); addControls(Tabs.E); addControls(Tabs.L); addControls(Tabs.M); addControls(Tabs.S)
 
-    -- Settings tab
+    -- Settings tab with full-screen toggle
     local propLabel = Tabs.St:AddParagraph({ Title = "📊 Props", Content = "Checking..." })
     task.spawn(function()
         while true do
@@ -432,7 +423,15 @@ if UseFluent and Fluent then
             task.wait(2)
         end
     end)
-    Tabs.St:AddButton({ Title = "🔄Refresh", Description = "", Callback = function() findProps() Fluent:Notify({Title="Refreshed", Content=#propList.." props", Duration=2}) end })
+    Tabs.St:AddButton({ Title = "🔄Refresh", Description = "", Callback = function()
+        findProps()
+        if Fluent then Fluent:Notify({Title="Refreshed", Content=#propList.." props", Duration=2}) end
+    end })
+    Tabs.St:AddButton({ Title = "📐Full Screen", Description = "Toggle size", Callback = function()
+        isFull = not isFull
+        Window:SetSize(isFull and fullSize or compactSize)
+        if Fluent then Fluent:Notify({Title=isFull and "Full" or "Compact", Content="Size changed", Duration=2}) end
+    end })
     Tabs.St:AddParagraph({ Title = "📖 Info", Content = "139 auras • Auto 15/25" })
 
     task.spawn(function()
@@ -441,7 +440,7 @@ if UseFluent and Fluent then
             findProps()
             Window:SelectTab(1)
         end)
-        Fluent:Notify({ Title = "MANI PROP GUI", Content = "139 Auras Loaded!", Duration = 3 })
+        if Fluent then Fluent:Notify({ Title = "MANI PROP GUI", Content = "139 Auras Loaded!", Duration = 3 }) end
     end)
 
     pcall(function()
@@ -461,7 +460,7 @@ if UseFluent and Fluent then
     game.Players.LocalPlayer.CharacterAdded:Connect(function() stopAura() end)
 
 else
-    -- Fallback GUI (even smaller)
+    -- Fallback GUI with minimize and full-screen toggle
     local player = game.Players.LocalPlayer
     local gui = Instance.new("ScreenGui")
     gui.Name = "MANIPropGUI"
@@ -469,8 +468,8 @@ else
     gui.Parent = player.PlayerGui
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 280, 0, 380)
-    frame.Position = UDim2.new(0.5, -140, 0.5, -190)
+    frame.Size = UDim2.new(0, 300, 0, 400)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -200)
     frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
@@ -486,9 +485,23 @@ else
     title.Font = Enum.Font.Bold
     title.Parent = frame
 
+    -- Minimize button (toggle visibility)
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.new(0,28,0,22)
+    minBtn.Position = UDim2.new(1,-60,0,3)
+    minBtn.BackgroundColor3 = Color3.fromRGB(50,50,150)
+    minBtn.Text = "─"
+    minBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    minBtn.TextScaled = true
+    minBtn.Font = Enum.Font.Bold
+    minBtn.Parent = frame
+    minBtn.MouseButton1Click:Connect(function()
+        gui.Enabled = not gui.Enabled
+    end)
+
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0,22,0,22)
-    closeBtn.Position = UDim2.new(1,-26,0,3)
+    closeBtn.Size = UDim2.new(0,28,0,22)
+    closeBtn.Position = UDim2.new(1,-30,0,3)
     closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
     closeBtn.Text = "X"
     closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -546,8 +559,8 @@ else
     createCategory("💠 Secret", secretList)
 
     local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(0,70,0,20)
-    stopBtn.Position = UDim2.new(0.5,-80,1,-28)
+    stopBtn.Size = UDim2.new(0,60,0,20)
+    stopBtn.Position = UDim2.new(0.5,-70,1,-28)
     stopBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
     stopBtn.Text = "Stop"
     stopBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -557,7 +570,7 @@ else
     stopBtn.MouseButton1Click:Connect(function() stopAura() end)
 
     local resetBtn = Instance.new("TextButton")
-    resetBtn.Size = UDim2.new(0,70,0,20)
+    resetBtn.Size = UDim2.new(0,60,0,20)
     resetBtn.Position = UDim2.new(0.5,10,1,-28)
     resetBtn.BackgroundColor3 = Color3.fromRGB(50,50,200)
     resetBtn.Text = "Reset"
@@ -578,6 +591,29 @@ else
                     else prop.CFrame = CFrame.new(hrp.Position) end
                 end)
             end
+        end
+    end)
+
+    -- Full-screen toggle button
+    local sizeBtn = Instance.new("TextButton")
+    sizeBtn.Size = UDim2.new(0,60,0,20)
+    sizeBtn.Position = UDim2.new(0.5, -10, 1, -28)
+    sizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    sizeBtn.Text = "Full"
+    sizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    sizeBtn.TextScaled = true
+    sizeBtn.Font = Enum.Font.Bold
+    sizeBtn.Parent = frame
+    sizeBtn.MouseButton1Click:Connect(function()
+        isFull = not isFull
+        if isFull then
+            frame.Size = UDim2.new(0, 480, 0, 560)
+            frame.Position = UDim2.new(0.5, -240, 0.5, -280)
+            sizeBtn.Text = "Compact"
+        else
+            frame.Size = UDim2.new(0, 300, 0, 400)
+            frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+            sizeBtn.Text = "Full"
         end
     end)
 
