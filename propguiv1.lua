@@ -1,8 +1,7 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- Auto-detects 15 or 25 props, with fallback UI if Fluent fails to load
--- Ultra-compact size for mobile & PC (360x470 / 300x400)
+-- Ultra-compact for mobile: 320x420 / 280x380
+-- Fixed prop detection to match your original script
 
--- All Aura Configurations (shared between Fluent and fallback)
 local AllAuraConfigs = {
     -- Common Auras
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
@@ -152,7 +151,6 @@ local AllAuraConfigs = {
     Realityexe = { name = "Reality.exe", speed = 0.8, radius = 19, offsetY = 3, rotation = 10, type = "double", color = "💠" }
 }
 
--- Shared variables
 local currentAura = nil
 local auraRunning = false
 local auraCoroutine = nil
@@ -161,41 +159,21 @@ local centerPosition = nil
 local propFolder = nil
 local totalProps = 0
 
--- Shared functions
+-- Fixed prop detection (exactly matching your original script)
 local function findProps()
     propList = {}
     local player = game.Players.LocalPlayer
-    
-    local possiblePaths = {
-        "WorkspaceCom/001_TrafficCones",
-        "Workspace/WorkspaceCom/001_TrafficCones",
-        "Workspace/Props",
-        "Workspace/TrafficCones"
-    }
-    
-    for _, path in ipairs(possiblePaths) do
-        local parts = {}
-        for part in string.gmatch(path, "[^/]+") do
-            table.insert(parts, part)
-        end
-        
-        local current = workspace
-        local found = true
-        for _, part in ipairs(parts) do
-            current = current:FindFirstChild(part)
-            if not current then
-                found = false
-                break
-            end
-        end
-        
-        if found then
-            propFolder = current
-            break
-        end
+
+    -- Try exact path first
+    local folder = workspace:FindFirstChild("WorkspaceCom")
+    if folder then
+        folder = folder:FindFirstChild("001_TrafficCones")
     end
-    
-    if not propFolder then
+
+    if folder then
+        propFolder = folder
+    else
+        -- fallback search
         for _, child in ipairs(workspace:GetDescendants()) do
             if child:IsA("Folder") and (child.Name:lower():find("prop") or child.Name:lower():find("cone") or child.Name:lower():find("traffic")) then
                 propFolder = child
@@ -203,73 +181,68 @@ local function findProps()
             end
         end
     end
-    
+
     if not propFolder then
         return false
     end
-    
-    local playerName = game.Players.LocalPlayer.Name
+
+    -- Collect props: first try to match player name
+    local playerName = player.Name
+    local foundAny = false
     for _, v in pairs(propFolder:GetChildren()) do
         if v:IsA("BasePart") or v:IsA("Model") then
-            if string.find(v.Name, playerName) or string.find(v.Name, player.Name) then
+            if string.find(v.Name, playerName) then
                 table.insert(propList, v)
+                foundAny = true
             end
         end
     end
-    
-    if #propList < 15 then
-        propList = {}
+
+    -- If none match, take all props
+    if not foundAny then
         for _, v in pairs(propFolder:GetChildren()) do
             if v:IsA("BasePart") or v:IsA("Model") then
                 table.insert(propList, v)
             end
         end
     end
-    
+
     if #propList < 15 then
         return false
     end
-    
-    if #propList >= 25 then
-        totalProps = 25
-    else
-        totalProps = 15
-    end
-    
+
+    totalProps = (#propList >= 25) and 25 or 15
     return true
 end
 
+-- Animation function with proper SetCurrentCFrame handling
 local function runAuraAnimation(config)
     if auraRunning then return end
     auraRunning = true
-    
     local player = game.Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
     local useProps = totalProps
-    
+
     while auraRunning do
         if not char or not char.Parent then
             char = player.Character or player.CharacterAdded:Wait()
         end
-        
+
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
             centerPosition = hrp.Position
-            
             local total = math.min(useProps, #propList)
             local usedProps = {}
-            
             for i = 1, total do
                 table.insert(usedProps, propList[i])
             end
-            
+
             for i, prop in ipairs(usedProps) do
                 if prop and prop.Parent then
                     local angle = (2 * math.pi / total) * i + tick() * config.speed
-                    
                     local radius = config.radius
                     local offsetY = config.offsetY
-                    
+
                     if config.type == "wave" then
                         radius = config.radius + math.sin(angle * 3 + tick() * 2) * 2
                     elseif config.type == "spiral" then
@@ -289,17 +262,19 @@ local function runAuraAnimation(config)
                             offsetY = config.offsetY - 1 + math.sin(tick() * config.speed * 0.5)
                         end
                     end
-                    
+
                     local x = math.cos(angle + math.rad(config.rotation)) * radius
                     local z = math.sin(angle + math.rad(config.rotation)) * radius
                     local y = offsetY + math.sin(tick() * config.speed + i) * 0.5
-                    
+
                     local newPos = centerPosition + Vector3.new(x, y, z)
                     local lookAt = CFrame.new(newPos, centerPosition)
-                    
+
+                    -- Use InvokeServer if available, otherwise set CFrame directly
                     pcall(function()
-                        if prop:FindFirstChild("SetCurrentCFrame") then
-                            prop:WaitForChild("SetCurrentCFrame"):InvokeServer(lookAt)
+                        local setCF = prop:FindFirstChild("SetCurrentCFrame")
+                        if setCF then
+                            setCF:InvokeServer(lookAt)
                         else
                             prop.CFrame = lookAt
                         end
@@ -307,7 +282,6 @@ local function runAuraAnimation(config)
                 end
             end
         end
-        
         task.wait(0.05)
     end
 end
@@ -323,37 +297,30 @@ end
 
 local function startAura(auraKey)
     stopAura()
-    
     if not findProps() then
         print("No props found!")
         return
     end
-    
     local config = AllAuraConfigs[auraKey]
     if not config then
         return
     end
-    
-    local useProps = totalProps
-    if useProps < 15 then
+    if totalProps < 15 then
         print("Not enough props!")
         return
     end
-    
     currentAura = auraKey
     auraRunning = true
     auraCoroutine = coroutine.create(function()
         runAuraAnimation(config)
     end)
     coroutine.resume(auraCoroutine)
-    
-    print(config.color .. " " .. config.name .. " activated with " .. useProps .. " props")
+    print(config.color .. " " .. config.name .. " activated with " .. totalProps .. " props")
 end
 
--- ========== Try to load Fluent ==========
+-- Try to load Fluent
 local UseFluent = false
 local Fluent = nil
-
 for attempt = 1, 3 do
     local success, result = pcall(function()
         return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
@@ -367,49 +334,42 @@ for attempt = 1, 3 do
 end
 
 if UseFluent and Fluent then
-    -- Load SaveManager and InterfaceManager if available
     local SaveManager, InterfaceManager
     pcall(function()
         SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
         InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
     end)
-    
-    -- Create Fluent window with very small size
+
     local Window = Fluent:CreateWindow({
-        Title = "MANI PROP GUI V.1",
-        SubTitle = "by @MANISH_K05",
-        TabWidth = 120, -- narrower tabs
-        Size = UDim2.fromOffset(360, 470), -- compact for mobile
+        Title = "MANI PROP GUI",
+        SubTitle = "v1",
+        TabWidth = 100,
+        Size = UDim2.fromOffset(320, 420),
         Acrylic = true,
         Theme = "Dark",
         MinimizeKey = Enum.KeyCode.LeftControl
     })
-    
+
     local Tabs = {
-        Common = Window:AddTab({ Title = "🟢", Icon = "sparkles" }), -- shortened titles
-        Uncommon = Window:AddTab({ Title = "🔵", Icon = "gem" }),
-        Rare = Window:AddTab({ Title = "🟣", Icon = "crown" }),
-        Epic = Window:AddTab({ Title = "🟠", Icon = "flame" }),
-        Legendary = Window:AddTab({ Title = "🔴", Icon = "star" }),
-        Mythic = Window:AddTab({ Title = "🟡", Icon = "infinity" }),
-        Secret = Window:AddTab({ Title = "💠", Icon = "eye" }),
-        Settings = Window:AddTab({ Title = "⚙️", Icon = "settings" })
+        C = Window:AddTab({ Title = "🟢", Icon = "sparkles" }),
+        U = Window:AddTab({ Title = "🔵", Icon = "gem" }),
+        R = Window:AddTab({ Title = "🟣", Icon = "crown" }),
+        E = Window:AddTab({ Title = "🟠", Icon = "flame" }),
+        L = Window:AddTab({ Title = "🔴", Icon = "star" }),
+        M = Window:AddTab({ Title = "🟡", Icon = "infinity" }),
+        S = Window:AddTab({ Title = "💠", Icon = "eye" }),
+        St = Window:AddTab({ Title = "⚙️", Icon = "settings" })
     }
-    
-    -- Build aura buttons for a tab
-    local function buildAuraButtons(tab, auraKeys, title, subtitle)
+
+    local function buildAuraButtons(tab, auraKeys, title)
         pcall(function()
-            tab:AddParagraph({
-                Title = title,
-                Content = subtitle
-            })
-            
+            tab:AddParagraph({ Title = title, Content = "15/25 props" })
             for _, key in ipairs(auraKeys) do
                 local config = AllAuraConfigs[key]
                 if config then
                     tab:AddButton({
                         Title = config.name,
-                        Description = "Auto",
+                        Description = "",
                         Callback = function()
                             startAura(key)
                         end
@@ -418,209 +378,72 @@ if UseFluent and Fluent then
             end
         end)
     end
-    
-    -- Build all tabs
-    local function buildCommonUI()
-        local auraList = {
-            "SoftGlow", "FreshBreeze", "CalmRing", "TinyOrbit", "SimpleHalo",
-            "FloatingMist", "GentleWave", "LightBloom", "MiniSpiral", "CloudRing",
-            "SoftOrbit", "BrightCircle", "PeaceAura", "BreezeHalo", "MorningGlow",
-            "FloatingStars", "LittleGalaxy", "DreamRing", "PureHalo", "SkyBloom"
-        }
-        buildAuraButtons(Tabs.Common, auraList, "⭐ Common", "15/25 props")
-    end
-    
-    local function buildUncommonUI()
-        local auraList = {
-            "AquaOrbit", "FrostRing", "CrystalWave", "WindSpiral", "Rainfall",
-            "BlueComet", "IceHalo", "MistSpiral", "OceanRing", "CloudSpiral",
-            "SnowOrbit", "SilverBloom", "MoonRing", "StarOrbit", "SkySpiral",
-            "FrozenHalo", "CrystalOrbit", "TidalWave", "WinterBloom", "ArcticRing"
-        }
-        buildAuraButtons(Tabs.Uncommon, auraList, "💎 Uncommon", "15/25 props")
-    end
-    
-    local function buildRareUI()
-        local auraList = {
-            "MysticSpiral", "PhantomRing", "ArcaneOrbit", "SoulHalo", "AstralBloom",
-            "RuneCircle", "DreamSpiral", "SpiritOrbit", "Moonveil", "Starveil",
-            "EtherRing", "MirageOrbit", "TwilightHalo", "SpectralBloom", "MysticCrown",
-            "AstralRing", "PhantomOrbit", "SoulSpiral", "ArcaneBloom", "Dreamveil"
-        }
-        buildAuraButtons(Tabs.Rare, auraList, "👑 Rare", "15/25 props")
-    end
-    
-    local function buildEpicUI()
-        local auraList = {
-            "SolarCrown", "LunarCrown", "ThunderRing", "FlameOrbit", "FrostCrown",
-            "StormSpiral", "CometHalo", "MeteorRing", "GalaxyOrbit", "NebulaBloom",
-            "GravityRing", "EnergySpiral", "VortexHalo", "PlasmaOrbit", "SolarSpiral",
-            "ThunderCrown", "CosmicRing", "Starstorm", "SupernovaHalo", "CelestialOrbit"
-        }
-        buildAuraButtons(Tabs.Epic, auraList, "🔥 Epic", "15/25 props")
-    end
-    
-    local function buildLegendaryUI()
-        local auraList = {
-            "EclipseCrown", "VoidSpiral", "InfinityRing", "EternalOrbit", "DivineHalo",
-            "AncientCrown", "ImmortalSpiral", "RealityRing", "DimensionOrbit", "TimeflowHalo",
-            "CosmicCrown", "UniverseSpiral", "InfinityBloom", "CelestialCrown", "EternityRing",
-            "AstralDominion", "DivineOrbit", "RealityHalo", "InfiniteSpiral", "EternalBloom"
-        }
-        buildAuraButtons(Tabs.Legendary, auraList, "⭐ Legendary", "15/25 props")
-    end
-    
-    local function buildMythicUI()
-        local auraList = {
-            "ChaosCrown", "AbyssOrbit", "OblivionRing", "VoidCrown", "DarkstarSpiral",
-            "BlackholeHalo", "EndworldOrbit", "PhantomDominion", "AbyssalCrown", "InfiniteVoid",
-            "RealityBreaker", "CosmicDestroyer", "EternalVoid", "DimensionBreak", "ChaosSpiral",
-            "Voidstorm", "BlackstarCrown", "OblivionHalo", "ZeroPoint", "FinalEclipse"
-        }
-        buildAuraButtons(Tabs.Mythic, auraList, "🌟 Mythic", "15/25 props")
-    end
-    
-    local function buildSecretUI()
-        local auraList = {
-            "NOVA15", "Fifteenfold", "Prophecy", "TheCollector", "LostFormation",
-            "ForbiddenOrbit", "UnknownEntity", "ZeroGravity", "BeyondReality", "TheLastAura",
-            "HiddenDimension", "InfiniteMachinery", "AbsoluteZero", "Worldbreaker", "EternalMachinery",
-            "UnknownSignal", "The15thRealm", "Singularity", "Realityexe"
-        }
-        buildAuraButtons(Tabs.Secret, auraList, "💠 Secret", "15/25 props")
-    end
-    
-    -- Build control UI
-    local function buildControlsUI()
-        local function addControls(tab)
-            tab:AddParagraph({
-                Title = "🎮 Controls",
-                Content = "Manage your aura"
-            })
-            
-            tab:AddButton({
-                Title = "⏹️ Stop",
-                Description = "Stop current aura",
-                Callback = function()
-                    stopAura()
-                    Fluent:Notify({
-                        Title = "Stopped",
-                        Content = "Aura stopped",
-                        Duration = 2
-                    })
+
+    local commonList = {"SoftGlow","FreshBreeze","CalmRing","TinyOrbit","SimpleHalo","FloatingMist","GentleWave","LightBloom","MiniSpiral","CloudRing","SoftOrbit","BrightCircle","PeaceAura","BreezeHalo","MorningGlow","FloatingStars","LittleGalaxy","DreamRing","PureHalo","SkyBloom"}
+    local uncommonList = {"AquaOrbit","FrostRing","CrystalWave","WindSpiral","Rainfall","BlueComet","IceHalo","MistSpiral","OceanRing","CloudSpiral","SnowOrbit","SilverBloom","MoonRing","StarOrbit","SkySpiral","FrozenHalo","CrystalOrbit","TidalWave","WinterBloom","ArcticRing"}
+    local rareList = {"MysticSpiral","PhantomRing","ArcaneOrbit","SoulHalo","AstralBloom","RuneCircle","DreamSpiral","SpiritOrbit","Moonveil","Starveil","EtherRing","MirageOrbit","TwilightHalo","SpectralBloom","MysticCrown","AstralRing","PhantomOrbit","SoulSpiral","ArcaneBloom","Dreamveil"}
+    local epicList = {"SolarCrown","LunarCrown","ThunderRing","FlameOrbit","FrostCrown","StormSpiral","CometHalo","MeteorRing","GalaxyOrbit","NebulaBloom","GravityRing","EnergySpiral","VortexHalo","PlasmaOrbit","SolarSpiral","ThunderCrown","CosmicRing","Starstorm","SupernovaHalo","CelestialOrbit"}
+    local legendaryList = {"EclipseCrown","VoidSpiral","InfinityRing","EternalOrbit","DivineHalo","AncientCrown","ImmortalSpiral","RealityRing","DimensionOrbit","TimeflowHalo","CosmicCrown","UniverseSpiral","InfinityBloom","CelestialCrown","EternityRing","AstralDominion","DivineOrbit","RealityHalo","InfiniteSpiral","EternalBloom"}
+    local mythicList = {"ChaosCrown","AbyssOrbit","OblivionRing","VoidCrown","DarkstarSpiral","BlackholeHalo","EndworldOrbit","PhantomDominion","AbyssalCrown","InfiniteVoid","RealityBreaker","CosmicDestroyer","EternalVoid","DimensionBreak","ChaosSpiral","Voidstorm","BlackstarCrown","OblivionHalo","ZeroPoint","FinalEclipse"}
+    local secretList = {"NOVA15","Fifteenfold","Prophecy","TheCollector","LostFormation","ForbiddenOrbit","UnknownEntity","ZeroGravity","BeyondReality","TheLastAura","HiddenDimension","InfiniteMachinery","AbsoluteZero","Worldbreaker","EternalMachinery","UnknownSignal","The15thRealm","Singularity","Realityexe"}
+
+    buildAuraButtons(Tabs.C, commonList, "⭐ Common")
+    buildAuraButtons(Tabs.U, uncommonList, "💎 Uncommon")
+    buildAuraButtons(Tabs.R, rareList, "👑 Rare")
+    buildAuraButtons(Tabs.E, epicList, "🔥 Epic")
+    buildAuraButtons(Tabs.L, legendaryList, "⭐ Legendary")
+    buildAuraButtons(Tabs.M, mythicList, "🌟 Mythic")
+    buildAuraButtons(Tabs.S, secretList, "💠 Secret")
+
+    -- Controls in each tab
+    local function addControls(tab)
+        tab:AddParagraph({ Title = "🎮", Content = "" })
+        tab:AddButton({ Title = "⏹️Stop", Description = "", Callback = function() stopAura() Fluent:Notify({Title="Stopped", Content="Aura stopped", Duration=2}) end })
+        tab:AddButton({ Title = "🔄Reset", Description = "", Callback = function()
+            stopAura()
+            if findProps() then
+                local player = game.Players.LocalPlayer
+                local char = player.Character or player.CharacterAdded:Wait()
+                local hrp = char:WaitForChild("HumanoidRootPart")
+                for _, prop in ipairs(propList) do
+                    pcall(function()
+                        local setCF = prop:FindFirstChild("SetCurrentCFrame")
+                        if setCF then setCF:InvokeServer(CFrame.new(hrp.Position))
+                        else prop.CFrame = CFrame.new(hrp.Position) end
+                    end)
                 end
-            })
-            
-            tab:AddButton({
-                Title = "🔄 Reset",
-                Description = "Reset props",
-                Callback = function()
-                    stopAura()
-                    if findProps() then
-                        local player = game.Players.LocalPlayer
-                        local char = player.Character or player.CharacterAdded:Wait()
-                        local hrp = char:WaitForChild("HumanoidRootPart")
-                        
-                        for _, prop in ipairs(propList) do
-                            pcall(function()
-                                if prop:FindFirstChild("SetCurrentCFrame") then
-                                    prop:WaitForChild("SetCurrentCFrame"):InvokeServer(CFrame.new(hrp.Position))
-                                else
-                                    prop.CFrame = CFrame.new(hrp.Position)
-                                end
-                            end)
-                        end
-                        Fluent:Notify({
-                            Title = "Reset",
-                            Content = "Props reset",
-                            Duration = 2
-                        })
-                    end
-                end
-            })
-        end
-        
-        addControls(Tabs.Common)
-        addControls(Tabs.Uncommon)
-        addControls(Tabs.Rare)
-        addControls(Tabs.Epic)
-        addControls(Tabs.Legendary)
-        addControls(Tabs.Mythic)
-        addControls(Tabs.Secret)
+                Fluent:Notify({Title="Reset", Content="Props reset", Duration=2})
+            end
+        end })
     end
-    
+    addControls(Tabs.C); addControls(Tabs.U); addControls(Tabs.R); addControls(Tabs.E); addControls(Tabs.L); addControls(Tabs.M); addControls(Tabs.S)
+
     -- Settings tab
-    local function buildSettingsUI()
-        Tabs.Settings:AddParagraph({
-            Title = "⚙️ Settings",
-            Content = "Aura settings"
-        })
-        
-        local propCountLabel = Tabs.Settings:AddParagraph({
-            Title = "📊 Props",
-            Content = "Checking..."
-        })
-        
-        task.spawn(function()
-            while true do
-                pcall(function()
-                    if findProps() then
-                        propCountLabel:SetContent(#propList .. " props found\nUsing " .. totalProps)
-                    else
-                        propCountLabel:SetContent("No props found")
-                    end
-                end)
-                task.wait(2)
-            end
-        end)
-        
-        Tabs.Settings:AddButton({
-            Title = "🔄 Refresh",
-            Description = "Refresh props",
-            Callback = function()
-                pcall(function()
-                    findProps()
-                    Fluent:Notify({
-                        Title = "Refreshed",
-                        Content = #propList .. " props (using " .. totalProps .. ")",
-                        Duration = 2
-                    })
-                end)
-            end
-        })
-        
-        Tabs.Settings:AddParagraph({
-            Title = "📖 Info",
-            Content = "139 auras • Auto 15/25 props"
-        })
-    end
-    
-    -- Initialize GUI
+    local propLabel = Tabs.St:AddParagraph({ Title = "📊 Props", Content = "Checking..." })
+    task.spawn(function()
+        while true do
+            pcall(function()
+                if findProps() then
+                    propLabel:SetContent(#propList .. " found • using " .. totalProps)
+                else
+                    propLabel:SetContent("No props")
+                end
+            end)
+            task.wait(2)
+        end
+    end)
+    Tabs.St:AddButton({ Title = "🔄Refresh", Description = "", Callback = function() findProps() Fluent:Notify({Title="Refreshed", Content=#propList.." props", Duration=2}) end })
+    Tabs.St:AddParagraph({ Title = "📖 Info", Content = "139 auras • Auto 15/25" })
+
     task.spawn(function()
         repeat task.wait() until game:IsLoaded()
-        
         pcall(function()
             findProps()
-            buildCommonUI()
-            buildUncommonUI()
-            buildRareUI()
-            buildEpicUI()
-            buildLegendaryUI()
-            buildMythicUI()
-            buildSecretUI()
-            buildControlsUI()
-            buildSettingsUI()
             Window:SelectTab(1)
         end)
-        
-        Fluent:Notify({
-            Title = "MANI PROP GUI",
-            Content = "139 Auras Loaded!",
-            Duration = 3
-        })
+        Fluent:Notify({ Title = "MANI PROP GUI", Content = "139 Auras Loaded!", Duration = 3 })
     end)
-    
-    -- Addons setup
+
     pcall(function()
         if SaveManager and InterfaceManager then
             SaveManager:SetLibrary(Fluent)
@@ -629,169 +452,116 @@ if UseFluent and Fluent then
             SaveManager:SetIgnoreIndexes({})
             InterfaceManager:SetFolder("MANIPropGUI")
             SaveManager:SetFolder("MANIPropGUI/props")
-            InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-            SaveManager:BuildConfigSection(Tabs.Settings)
+            InterfaceManager:BuildInterfaceSection(Tabs.St)
+            SaveManager:BuildConfigSection(Tabs.St)
             SaveManager:LoadAutoloadConfig()
         end
     end)
-    
-    -- Auto-stop aura when player respawns
-    game.Players.LocalPlayer.CharacterAdded:Connect(function()
-        stopAura()
-    end)
-    
+
+    game.Players.LocalPlayer.CharacterAdded:Connect(function() stopAura() end)
+
 else
-    -- ========== FALLBACK: Ultra-compact Custom GUI ==========
+    -- Fallback GUI (even smaller)
     local player = game.Players.LocalPlayer
     local gui = Instance.new("ScreenGui")
     gui.Name = "MANIPropGUI"
     gui.ResetOnSpawn = false
     gui.Parent = player.PlayerGui
-    
+
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 300, 0, 400)
-    frame.Position = UDim2.new(0.5, -150, 0.5, -200)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.Size = UDim2.new(0, 280, 0, 380)
+    frame.Position = UDim2.new(0.5, -140, 0.5, -190)
+    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
     frame.Parent = gui
-    
+
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.Position = UDim2.new(0, 0, 0, 0)
-    title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    title.Size = UDim2.new(1,0,0,28)
+    title.Position = UDim2.new(0,0,0,0)
+    title.BackgroundColor3 = Color3.fromRGB(50,50,50)
     title.Text = "MANI PROP GUI"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextColor3 = Color3.fromRGB(255,255,255)
     title.TextScaled = true
     title.Font = Enum.Font.Bold
     title.Parent = frame
-    
+
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0, 25, 0, 25)
-    closeBtn.Position = UDim2.new(1, -30, 0, 3)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    closeBtn.Size = UDim2.new(0,22,0,22)
+    closeBtn.Position = UDim2.new(1,-26,0,3)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
     closeBtn.Text = "X"
-    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
     closeBtn.TextScaled = true
     closeBtn.Font = Enum.Font.Bold
     closeBtn.Parent = frame
-    closeBtn.MouseButton1Click:Connect(function()
-        gui:Destroy()
-    end)
-    
+    closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, -10, 1, -70)
-    scroll.Position = UDim2.new(0, 5, 0, 35)
+    scroll.Size = UDim2.new(1,-10,1,-65)
+    scroll.Position = UDim2.new(0,5,0,32)
     scroll.BackgroundTransparency = 1
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scroll.ScrollBarThickness = 4
+    scroll.CanvasSize = UDim2.new(0,0,0,0)
+    scroll.ScrollBarThickness = 3
     scroll.Parent = frame
-    
+
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 2)
+    layout.Padding = UDim.new(0,2)
     layout.FillDirection = Enum.FillDirection.Vertical
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = scroll
-    
-    -- Function to create category with buttons
+
     local function createCategory(title, auraKeys)
         local catLabel = Instance.new("TextLabel")
-        catLabel.Size = UDim2.new(1, 0, 0, 18)
-        catLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        catLabel.Size = UDim2.new(1,0,0,16)
+        catLabel.BackgroundColor3 = Color3.fromRGB(60,60,60)
         catLabel.Text = title
-        catLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        catLabel.TextColor3 = Color3.fromRGB(255,255,255)
         catLabel.TextScaled = true
         catLabel.Font = Enum.Font.Bold
         catLabel.Parent = scroll
-        
+
         for _, key in ipairs(auraKeys) do
             local config = AllAuraConfigs[key]
             if config then
                 local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, 0, 0, 22)
-                btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+                btn.Size = UDim2.new(1,0,0,20)
+                btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
                 btn.Text = config.name
-                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.TextColor3 = Color3.fromRGB(255,255,255)
                 btn.TextScaled = true
                 btn.Font = Enum.Font.Regular
                 btn.Parent = scroll
-                btn.MouseButton1Click:Connect(function()
-                    startAura(key)
-                end)
+                btn.MouseButton1Click:Connect(function() startAura(key) end)
             end
         end
     end
-    
-    -- Create categories (shortened names to save space)
-    createCategory("🟢 Common", {
-        "SoftGlow", "FreshBreeze", "CalmRing", "TinyOrbit", "SimpleHalo",
-        "FloatingMist", "GentleWave", "LightBloom", "MiniSpiral", "CloudRing",
-        "SoftOrbit", "BrightCircle", "PeaceAura", "BreezeHalo", "MorningGlow",
-        "FloatingStars", "LittleGalaxy", "DreamRing", "PureHalo", "SkyBloom"
-    })
-    
-    createCategory("🔵 Uncommon", {
-        "AquaOrbit", "FrostRing", "CrystalWave", "WindSpiral", "Rainfall",
-        "BlueComet", "IceHalo", "MistSpiral", "OceanRing", "CloudSpiral",
-        "SnowOrbit", "SilverBloom", "MoonRing", "StarOrbit", "SkySpiral",
-        "FrozenHalo", "CrystalOrbit", "TidalWave", "WinterBloom", "ArcticRing"
-    })
-    
-    createCategory("🟣 Rare", {
-        "MysticSpiral", "PhantomRing", "ArcaneOrbit", "SoulHalo", "AstralBloom",
-        "RuneCircle", "DreamSpiral", "SpiritOrbit", "Moonveil", "Starveil",
-        "EtherRing", "MirageOrbit", "TwilightHalo", "SpectralBloom", "MysticCrown",
-        "AstralRing", "PhantomOrbit", "SoulSpiral", "ArcaneBloom", "Dreamveil"
-    })
-    
-    createCategory("🟠 Epic", {
-        "SolarCrown", "LunarCrown", "ThunderRing", "FlameOrbit", "FrostCrown",
-        "StormSpiral", "CometHalo", "MeteorRing", "GalaxyOrbit", "NebulaBloom",
-        "GravityRing", "EnergySpiral", "VortexHalo", "PlasmaOrbit", "SolarSpiral",
-        "ThunderCrown", "CosmicRing", "Starstorm", "SupernovaHalo", "CelestialOrbit"
-    })
-    
-    createCategory("🔴 Legendary", {
-        "EclipseCrown", "VoidSpiral", "InfinityRing", "EternalOrbit", "DivineHalo",
-        "AncientCrown", "ImmortalSpiral", "RealityRing", "DimensionOrbit", "TimeflowHalo",
-        "CosmicCrown", "UniverseSpiral", "InfinityBloom", "CelestialCrown", "EternityRing",
-        "AstralDominion", "DivineOrbit", "RealityHalo", "InfiniteSpiral", "EternalBloom"
-    })
-    
-    createCategory("🟡 Mythic", {
-        "ChaosCrown", "AbyssOrbit", "OblivionRing", "VoidCrown", "DarkstarSpiral",
-        "BlackholeHalo", "EndworldOrbit", "PhantomDominion", "AbyssalCrown", "InfiniteVoid",
-        "RealityBreaker", "CosmicDestroyer", "EternalVoid", "DimensionBreak", "ChaosSpiral",
-        "Voidstorm", "BlackstarCrown", "OblivionHalo", "ZeroPoint", "FinalEclipse"
-    })
-    
-    createCategory("💠 Secret", {
-        "NOVA15", "Fifteenfold", "Prophecy", "TheCollector", "LostFormation",
-        "ForbiddenOrbit", "UnknownEntity", "ZeroGravity", "BeyondReality", "TheLastAura",
-        "HiddenDimension", "InfiniteMachinery", "AbsoluteZero", "Worldbreaker", "EternalMachinery",
-        "UnknownSignal", "The15thRealm", "Singularity", "Realityexe"
-    })
-    
-    -- Stop button
+
+    createCategory("🟢 Common", commonList)
+    createCategory("🔵 Uncommon", uncommonList)
+    createCategory("🟣 Rare", rareList)
+    createCategory("🟠 Epic", epicList)
+    createCategory("🔴 Legendary", legendaryList)
+    createCategory("🟡 Mythic", mythicList)
+    createCategory("💠 Secret", secretList)
+
     local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(0, 80, 0, 22)
-    stopBtn.Position = UDim2.new(0.5, -90, 1, -30)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    stopBtn.Size = UDim2.new(0,70,0,20)
+    stopBtn.Position = UDim2.new(0.5,-80,1,-28)
+    stopBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
     stopBtn.Text = "Stop"
-    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    stopBtn.TextColor3 = Color3.fromRGB(255,255,255)
     stopBtn.TextScaled = true
     stopBtn.Font = Enum.Font.Bold
     stopBtn.Parent = frame
-    stopBtn.MouseButton1Click:Connect(function()
-        stopAura()
-    end)
-    
+    stopBtn.MouseButton1Click:Connect(function() stopAura() end)
+
     local resetBtn = Instance.new("TextButton")
-    resetBtn.Size = UDim2.new(0, 80, 0, 22)
-    resetBtn.Position = UDim2.new(0.5, 10, 1, -30)
-    resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+    resetBtn.Size = UDim2.new(0,70,0,20)
+    resetBtn.Position = UDim2.new(0.5,10,1,-28)
+    resetBtn.BackgroundColor3 = Color3.fromRGB(50,50,200)
     resetBtn.Text = "Reset"
-    resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    resetBtn.TextColor3 = Color3.fromRGB(255,255,255)
     resetBtn.TextScaled = true
     resetBtn.Font = Enum.Font.Bold
     resetBtn.Parent = frame
@@ -803,21 +573,15 @@ else
             local hrp = char:WaitForChild("HumanoidRootPart")
             for _, prop in ipairs(propList) do
                 pcall(function()
-                    if prop:FindFirstChild("SetCurrentCFrame") then
-                        prop:WaitForChild("SetCurrentCFrame"):InvokeServer(CFrame.new(hrp.Position))
-                    else
-                        prop.CFrame = CFrame.new(hrp.Position)
-                    end
+                    local setCF = prop:FindFirstChild("SetCurrentCFrame")
+                    if setCF then setCF:InvokeServer(CFrame.new(hrp.Position))
+                    else prop.CFrame = CFrame.new(hrp.Position) end
                 end)
             end
         end
     end)
-    
-    -- Auto-stop on respawn
-    game.Players.LocalPlayer.CharacterAdded:Connect(function()
-        stopAura()
-    end)
-    
+
+    game.Players.LocalPlayer.CharacterAdded:Connect(function() stopAura() end)
     findProps()
     print("Fallback GUI loaded. Props: " .. #propList .. " (using " .. totalProps .. ")")
 end
