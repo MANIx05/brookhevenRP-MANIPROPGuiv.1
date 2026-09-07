@@ -1,6 +1,6 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
 -- Auto-detects 15 or 25 props, with fallback UI if Fluent fails to load
--- Optimized for mobile & PC: smaller, scrollable GUI
+-- Ultra-compact size for mobile & PC (360x470 / 300x400)
 
 -- All Aura Configurations (shared between Fluent and fallback)
 local AllAuraConfigs = {
@@ -374,26 +374,26 @@ if UseFluent and Fluent then
         InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
     end)
     
-    -- Create Fluent window with smaller size
+    -- Create Fluent window with very small size
     local Window = Fluent:CreateWindow({
         Title = "MANI PROP GUI V.1",
         SubTitle = "by @MANISH_K05",
-        TabWidth = 140,
-        Size = UDim2.fromOffset(480, 520), -- Smaller for mobile/PC
+        TabWidth = 120, -- narrower tabs
+        Size = UDim2.fromOffset(360, 470), -- compact for mobile
         Acrylic = true,
         Theme = "Dark",
         MinimizeKey = Enum.KeyCode.LeftControl
     })
     
     local Tabs = {
-        Common = Window:AddTab({ Title = "🟢 Common", Icon = "sparkles" }),
-        Uncommon = Window:AddTab({ Title = "🔵 Uncommon", Icon = "gem" }),
-        Rare = Window:AddTab({ Title = "🟣 Rare", Icon = "crown" }),
-        Epic = Window:AddTab({ Title = "🟠 Epic", Icon = "flame" }),
-        Legendary = Window:AddTab({ Title = "🔴 Legendary", Icon = "star" }),
-        Mythic = Window:AddTab({ Title = "🟡 Mythic", Icon = "infinity" }),
-        Secret = Window:AddTab({ Title = "💠 Secret", Icon = "eye" }),
-        Settings = Window:AddTab({ Title = "⚙️ Settings", Icon = "settings" })
+        Common = Window:AddTab({ Title = "🟢", Icon = "sparkles" }), -- shortened titles
+        Uncommon = Window:AddTab({ Title = "🔵", Icon = "gem" }),
+        Rare = Window:AddTab({ Title = "🟣", Icon = "crown" }),
+        Epic = Window:AddTab({ Title = "🟠", Icon = "flame" }),
+        Legendary = Window:AddTab({ Title = "🔴", Icon = "star" }),
+        Mythic = Window:AddTab({ Title = "🟡", Icon = "infinity" }),
+        Secret = Window:AddTab({ Title = "💠", Icon = "eye" }),
+        Settings = Window:AddTab({ Title = "⚙️", Icon = "settings" })
     }
     
     -- Build aura buttons for a tab
@@ -408,8 +408,8 @@ if UseFluent and Fluent then
                 local config = AllAuraConfigs[key]
                 if config then
                     tab:AddButton({
-                        Title = config.name .. " (Auto)",
-                        Description = "Auto-detects 15 or 25 props",
+                        Title = config.name,
+                        Description = "Auto",
                         Callback = function()
                             startAura(key)
                         end
@@ -427,7 +427,7 @@ if UseFluent and Fluent then
             "SoftOrbit", "BrightCircle", "PeaceAura", "BreezeHalo", "MorningGlow",
             "FloatingStars", "LittleGalaxy", "DreamRing", "PureHalo", "SkyBloom"
         }
-        buildAuraButtons(Tabs.Common, auraList, "⭐ Common Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Common, auraList, "⭐ Common", "15/25 props")
     end
     
     local function buildUncommonUI()
@@ -437,7 +437,7 @@ if UseFluent and Fluent then
             "SnowOrbit", "SilverBloom", "MoonRing", "StarOrbit", "SkySpiral",
             "FrozenHalo", "CrystalOrbit", "TidalWave", "WinterBloom", "ArcticRing"
         }
-        buildAuraButtons(Tabs.Uncommon, auraList, "💎 Uncommon Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Uncommon, auraList, "💎 Uncommon", "15/25 props")
     end
     
     local function buildRareUI()
@@ -447,7 +447,7 @@ if UseFluent and Fluent then
             "EtherRing", "MirageOrbit", "TwilightHalo", "SpectralBloom", "MysticCrown",
             "AstralRing", "PhantomOrbit", "SoulSpiral", "ArcaneBloom", "Dreamveil"
         }
-        buildAuraButtons(Tabs.Rare, auraList, "👑 Rare Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Rare, auraList, "👑 Rare", "15/25 props")
     end
     
     local function buildEpicUI()
@@ -457,7 +457,7 @@ if UseFluent and Fluent then
             "GravityRing", "EnergySpiral", "VortexHalo", "PlasmaOrbit", "SolarSpiral",
             "ThunderCrown", "CosmicRing", "Starstorm", "SupernovaHalo", "CelestialOrbit"
         }
-        buildAuraButtons(Tabs.Epic, auraList, "🔥 Epic Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Epic, auraList, "🔥 Epic", "15/25 props")
     end
     
     local function buildLegendaryUI()
@@ -467,7 +467,7 @@ if UseFluent and Fluent then
             "CosmicCrown", "UniverseSpiral", "InfinityBloom", "CelestialCrown", "EternityRing",
             "AstralDominion", "DivineOrbit", "RealityHalo", "InfiniteSpiral", "EternalBloom"
         }
-        buildAuraButtons(Tabs.Legendary, auraList, "⭐ Legendary Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Legendary, auraList, "⭐ Legendary", "15/25 props")
     end
     
     local function buildMythicUI()
@@ -477,7 +477,7 @@ if UseFluent and Fluent then
             "RealityBreaker", "CosmicDestroyer", "EternalVoid", "DimensionBreak", "ChaosSpiral",
             "Voidstorm", "BlackstarCrown", "OblivionHalo", "ZeroPoint", "FinalEclipse"
         }
-        buildAuraButtons(Tabs.Mythic, auraList, "🌟 Mythic Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Mythic, auraList, "🌟 Mythic", "15/25 props")
     end
     
     local function buildSecretUI()
@@ -487,7 +487,7 @@ if UseFluent and Fluent then
             "HiddenDimension", "InfiniteMachinery", "AbsoluteZero", "Worldbreaker", "EternalMachinery",
             "UnknownSignal", "The15thRealm", "Singularity", "Realityexe"
         }
-        buildAuraButtons(Tabs.Secret, auraList, "💠 Secret / Ultra Rare Auras", "Auto-detects 15 or 25 props")
+        buildAuraButtons(Tabs.Secret, auraList, "💠 Secret", "15/25 props")
     end
     
     -- Build control UI
@@ -499,21 +499,21 @@ if UseFluent and Fluent then
             })
             
             tab:AddButton({
-                Title = "⏹️ Stop Aura",
-                Description = "Stop the current aura",
+                Title = "⏹️ Stop",
+                Description = "Stop current aura",
                 Callback = function()
                     stopAura()
                     Fluent:Notify({
-                        Title = "Aura Stopped",
-                        Content = "All props stopped",
-                        Duration = 3
+                        Title = "Stopped",
+                        Content = "Aura stopped",
+                        Duration = 2
                     })
                 end
             })
             
             tab:AddButton({
-                Title = "🔄 Reset Props",
-                Description = "Reset props to center position",
+                Title = "🔄 Reset",
+                Description = "Reset props",
                 Callback = function()
                     stopAura()
                     if findProps() then
@@ -531,9 +531,9 @@ if UseFluent and Fluent then
                             end)
                         end
                         Fluent:Notify({
-                            Title = "Props Reset",
-                            Content = "All props moved to center",
-                            Duration = 3
+                            Title = "Reset",
+                            Content = "Props reset",
+                            Duration = 2
                         })
                     end
                 end
@@ -553,21 +553,21 @@ if UseFluent and Fluent then
     local function buildSettingsUI()
         Tabs.Settings:AddParagraph({
             Title = "⚙️ Settings",
-            Content = "Aura settings and information"
+            Content = "Aura settings"
         })
         
         local propCountLabel = Tabs.Settings:AddParagraph({
-            Title = "📊 Props Status",
-            Content = "Checking props..."
+            Title = "📊 Props",
+            Content = "Checking..."
         })
         
         task.spawn(function()
             while true do
                 pcall(function()
                     if findProps() then
-                        propCountLabel:SetContent("Found " .. #propList .. " props available\nUsing " .. totalProps .. " props for auras")
+                        propCountLabel:SetContent(#propList .. " props found\nUsing " .. totalProps)
                     else
-                        propCountLabel:SetContent("No props found\nMake sure you have props placed")
+                        propCountLabel:SetContent("No props found")
                     end
                 end)
                 task.wait(2)
@@ -575,32 +575,23 @@ if UseFluent and Fluent then
         end)
         
         Tabs.Settings:AddButton({
-            Title = "🔄 Refresh Props",
-            Description = "Refresh the prop list",
+            Title = "🔄 Refresh",
+            Description = "Refresh props",
             Callback = function()
                 pcall(function()
                     findProps()
                     Fluent:Notify({
                         Title = "Refreshed",
-                        Content = "Found " .. #propList .. " props (using " .. totalProps .. ")",
-                        Duration = 3
+                        Content = #propList .. " props (using " .. totalProps .. ")",
+                        Duration = 2
                     })
                 end)
             end
         })
         
         Tabs.Settings:AddParagraph({
-            Title = "📖 Aura Info",
-            Content = "139 Different Auras Available:\n" ..
-                       "• All auras automatically detect props\n" ..
-                       "• Uses 15 props if you have 15-24 props\n" ..
-                       "• Uses 25 props if you have 25+ props\n\n" ..
-                       "Aura Types:\n" ..
-                       "• Circle - Standard ring\n" ..
-                       "• Wave - Wavy motion\n" ..
-                       "• Spiral - Spiral pattern\n" ..
-                       "• Star - Star pattern\n" ..
-                       "• Double - Two-layer ring"
+            Title = "📖 Info",
+            Content = "139 auras • Auto 15/25 props"
         })
     end
     
@@ -623,24 +614,10 @@ if UseFluent and Fluent then
         end)
         
         Fluent:Notify({
-            Title = "MANI PROP GUI V.1",
-            Content = "139 Auras Loaded Successfully!",
-            Duration = 5
+            Title = "MANI PROP GUI",
+            Content = "139 Auras Loaded!",
+            Duration = 3
         })
-        
-        if #propList > 0 then
-            Fluent:Notify({
-                Title = "Props Found",
-                Content = #propList .. " props found (using " .. totalProps .. ")",
-                Duration = 5
-            })
-        else
-            Fluent:Notify({
-                Title = "No Props Found",
-                Content = "Place props to use auras",
-                Duration = 5
-            })
-        end
     end)
     
     -- Addons setup
@@ -664,7 +641,7 @@ if UseFluent and Fluent then
     end)
     
 else
-    -- ========== FALLBACK: Simple Custom GUI (smaller) ==========
+    -- ========== FALLBACK: Ultra-compact Custom GUI ==========
     local player = game.Players.LocalPlayer
     local gui = Instance.new("ScreenGui")
     gui.Name = "MANIPropGUI"
@@ -672,18 +649,18 @@ else
     gui.Parent = player.PlayerGui
     
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 320, 0, 450) -- Smaller size
-    frame.Position = UDim2.new(0.5, -160, 0.5, -225)
+    frame.Size = UDim2.new(0, 300, 0, 400)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -200)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
     frame.Parent = gui
     
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 35)
+    title.Size = UDim2.new(1, 0, 0, 30)
     title.Position = UDim2.new(0, 0, 0, 0)
     title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    title.Text = "MANI PROP GUI V.1"
+    title.Text = "MANI PROP GUI"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextScaled = true
     title.Font = Enum.Font.Bold
@@ -691,7 +668,7 @@ else
     
     local closeBtn = Instance.new("TextButton")
     closeBtn.Size = UDim2.new(0, 25, 0, 25)
-    closeBtn.Position = UDim2.new(1, -30, 0, 5)
+    closeBtn.Position = UDim2.new(1, -30, 0, 3)
     closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     closeBtn.Text = "X"
     closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -704,14 +681,14 @@ else
     
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, -10, 1, -70)
-    scroll.Position = UDim2.new(0, 5, 0, 40)
+    scroll.Position = UDim2.new(0, 5, 0, 35)
     scroll.BackgroundTransparency = 1
     scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     scroll.ScrollBarThickness = 4
     scroll.Parent = frame
     
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 3)
+    layout.Padding = UDim.new(0, 2)
     layout.FillDirection = Enum.FillDirection.Vertical
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = scroll
@@ -719,7 +696,7 @@ else
     -- Function to create category with buttons
     local function createCategory(title, auraKeys)
         local catLabel = Instance.new("TextLabel")
-        catLabel.Size = UDim2.new(1, 0, 0, 20)
+        catLabel.Size = UDim2.new(1, 0, 0, 18)
         catLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
         catLabel.Text = title
         catLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -731,9 +708,9 @@ else
             local config = AllAuraConfigs[key]
             if config then
                 local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, 0, 0, 25)
+                btn.Size = UDim2.new(1, 0, 0, 22)
                 btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-                btn.Text = config.name .. " (Auto)"
+                btn.Text = config.name
                 btn.TextColor3 = Color3.fromRGB(255, 255, 255)
                 btn.TextScaled = true
                 btn.Font = Enum.Font.Regular
@@ -745,50 +722,50 @@ else
         end
     end
     
-    -- Create categories
-    createCategory("🟢 Common Auras", {
+    -- Create categories (shortened names to save space)
+    createCategory("🟢 Common", {
         "SoftGlow", "FreshBreeze", "CalmRing", "TinyOrbit", "SimpleHalo",
         "FloatingMist", "GentleWave", "LightBloom", "MiniSpiral", "CloudRing",
         "SoftOrbit", "BrightCircle", "PeaceAura", "BreezeHalo", "MorningGlow",
         "FloatingStars", "LittleGalaxy", "DreamRing", "PureHalo", "SkyBloom"
     })
     
-    createCategory("🔵 Uncommon Auras", {
+    createCategory("🔵 Uncommon", {
         "AquaOrbit", "FrostRing", "CrystalWave", "WindSpiral", "Rainfall",
         "BlueComet", "IceHalo", "MistSpiral", "OceanRing", "CloudSpiral",
         "SnowOrbit", "SilverBloom", "MoonRing", "StarOrbit", "SkySpiral",
         "FrozenHalo", "CrystalOrbit", "TidalWave", "WinterBloom", "ArcticRing"
     })
     
-    createCategory("🟣 Rare Auras", {
+    createCategory("🟣 Rare", {
         "MysticSpiral", "PhantomRing", "ArcaneOrbit", "SoulHalo", "AstralBloom",
         "RuneCircle", "DreamSpiral", "SpiritOrbit", "Moonveil", "Starveil",
         "EtherRing", "MirageOrbit", "TwilightHalo", "SpectralBloom", "MysticCrown",
         "AstralRing", "PhantomOrbit", "SoulSpiral", "ArcaneBloom", "Dreamveil"
     })
     
-    createCategory("🟠 Epic Auras", {
+    createCategory("🟠 Epic", {
         "SolarCrown", "LunarCrown", "ThunderRing", "FlameOrbit", "FrostCrown",
         "StormSpiral", "CometHalo", "MeteorRing", "GalaxyOrbit", "NebulaBloom",
         "GravityRing", "EnergySpiral", "VortexHalo", "PlasmaOrbit", "SolarSpiral",
         "ThunderCrown", "CosmicRing", "Starstorm", "SupernovaHalo", "CelestialOrbit"
     })
     
-    createCategory("🔴 Legendary Auras", {
+    createCategory("🔴 Legendary", {
         "EclipseCrown", "VoidSpiral", "InfinityRing", "EternalOrbit", "DivineHalo",
         "AncientCrown", "ImmortalSpiral", "RealityRing", "DimensionOrbit", "TimeflowHalo",
         "CosmicCrown", "UniverseSpiral", "InfinityBloom", "CelestialCrown", "EternityRing",
         "AstralDominion", "DivineOrbit", "RealityHalo", "InfiniteSpiral", "EternalBloom"
     })
     
-    createCategory("🟡 Mythic Auras", {
+    createCategory("🟡 Mythic", {
         "ChaosCrown", "AbyssOrbit", "OblivionRing", "VoidCrown", "DarkstarSpiral",
         "BlackholeHalo", "EndworldOrbit", "PhantomDominion", "AbyssalCrown", "InfiniteVoid",
         "RealityBreaker", "CosmicDestroyer", "EternalVoid", "DimensionBreak", "ChaosSpiral",
         "Voidstorm", "BlackstarCrown", "OblivionHalo", "ZeroPoint", "FinalEclipse"
     })
     
-    createCategory("💠 Secret / Ultra Rare Auras", {
+    createCategory("💠 Secret", {
         "NOVA15", "Fifteenfold", "Prophecy", "TheCollector", "LostFormation",
         "ForbiddenOrbit", "UnknownEntity", "ZeroGravity", "BeyondReality", "TheLastAura",
         "HiddenDimension", "InfiniteMachinery", "AbsoluteZero", "Worldbreaker", "EternalMachinery",
@@ -797,8 +774,8 @@ else
     
     -- Stop button
     local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(0, 90, 0, 25)
-    stopBtn.Position = UDim2.new(0.5, -100, 1, -35)
+    stopBtn.Size = UDim2.new(0, 80, 0, 22)
+    stopBtn.Position = UDim2.new(0.5, -90, 1, -30)
     stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     stopBtn.Text = "Stop"
     stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -807,13 +784,11 @@ else
     stopBtn.Parent = frame
     stopBtn.MouseButton1Click:Connect(function()
         stopAura()
-        print("Aura stopped")
     end)
     
-    -- Reset props button
     local resetBtn = Instance.new("TextButton")
-    resetBtn.Size = UDim2.new(0, 90, 0, 25)
-    resetBtn.Position = UDim2.new(0.5, 10, 1, -35)
+    resetBtn.Size = UDim2.new(0, 80, 0, 22)
+    resetBtn.Position = UDim2.new(0.5, 10, 1, -30)
     resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
     resetBtn.Text = "Reset"
     resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -835,7 +810,6 @@ else
                     end
                 end)
             end
-            print("Props reset")
         end
     end)
     
@@ -844,7 +818,6 @@ else
         stopAura()
     end)
     
-    -- Initial prop detection
     findProps()
-    print("Fallback GUI loaded. Props found: " .. #propList .. " (using " .. totalProps .. ")")
+    print("Fallback GUI loaded. Props: " .. #propList .. " (using " .. totalProps .. ")")
 end
