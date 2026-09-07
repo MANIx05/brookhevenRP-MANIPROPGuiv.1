@@ -1,23 +1,51 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- All auras automatically use 15 props if available, or 25 props if player has 25 total props
+-- All auras automatically use 15 props if available, or 25 props if player has 25+ total props
+-- Fixed: GUI loading, error handling, and stability
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+-- Load Fluent with error handling
+local Fluent, FluentError = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+end)
+
+if not Fluent then
+    warn("Failed to load Fluent library: " .. tostring(FluentError))
+    return
+end
+
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 -- AUTO MESSAGE IN ROBLOX CHAT
-game:GetService("ReplicatedStorage"):WaitForChild("DefaultChatSystemChatEvents"):WaitForChild("SayMessageRequest"):FireServer("MANI HUB LOADED", "All")
+pcall(function()
+    local chatService = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+    if chatService then
+        local sayMsg = chatService:FindFirstChild("SayMessageRequest")
+        if sayMsg then
+            sayMsg:FireServer("MANI HUB LOADED", "All")
+        end
+    end
+end)
 
-local Window = Fluent:CreateWindow({
-    Title = "MANI PROP GUI V.1",
-    SubTitle = "by @MANISH_K05",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(700, 660),
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
-})
+-- Create main window with error handling
+local Window
+local success, err = pcall(function()
+    Window = Fluent:CreateWindow({
+        Title = "MANI PROP GUI V.1",
+        SubTitle = "by @MANISH_K05",
+        TabWidth = 160,
+        Size = UDim2.fromOffset(700, 660),
+        Acrylic = true,
+        Theme = "Dark",
+        MinimizeKey = Enum.KeyCode.LeftControl
+    })
+end)
 
+if not success or not Window then
+    warn("Failed to create GUI window: " .. tostring(err))
+    return
+end
+
+-- Define tabs
 local Tabs = {
     Common = Window:AddTab({ Title = "🟢 Common", Icon = "sparkles" }),
     Uncommon = Window:AddTab({ Title = "🔵 Uncommon", Icon = "gem" }),
@@ -400,32 +428,25 @@ end
 
 -- Build aura buttons for a tab
 local function buildAuraButtons(tab, auraKeys, title, subtitle)
-    tab:AddParagraph({
-        Title = title,
-        Content = subtitle
-    })
-    
-    -- Create rows of buttons (4 per row for cleaner UI)
-    local row = {}
-    local buttonCount = 0
-    
-    for _, key in ipairs(auraKeys) do
-        local config = AllAuraConfigs[key]
-        if config then
-            buttonCount = buttonCount + 1
-            local displayName = config.name
-            -- Add indicator for 15 or 25 props
-            displayName = displayName .. " (Auto)"
-            
-            tab:AddButton({
-                Title = displayName,
-                Description = "Auto-detect: 15 or 25 props",
-                Callback = function()
-                    startAura(key)
-                end
-            })
+    pcall(function()
+        tab:AddParagraph({
+            Title = title,
+            Content = subtitle
+        })
+        
+        for _, key in ipairs(auraKeys) do
+            local config = AllAuraConfigs[key]
+            if config then
+                tab:AddButton({
+                    Title = config.name .. " (Auto)",
+                    Description = "Auto-detects 15 or 25 props",
+                    Callback = function()
+                        startAura(key)
+                    end
+                })
+            end
         end
-    end
+    end)
 end
 
 -- Build Common Aura UI
@@ -580,11 +601,13 @@ local function buildSettingsUI()
     -- Update prop count
     task.spawn(function()
         while true do
-            if findProps() then
-                propCountLabel:SetContent("Found " .. #propList .. " props available\nUsing " .. totalProps .. " props for auras")
-            else
-                propCountLabel:SetContent("No props found\nMake sure you have props placed")
-            end
+            pcall(function()
+                if findProps() then
+                    propCountLabel:SetContent("Found " .. #propList .. " props available\nUsing " .. totalProps .. " props for auras")
+                else
+                    propCountLabel:SetContent("No props found\nMake sure you have props placed")
+                end
+            end)
             task.wait(2)
         end
     end)
@@ -593,12 +616,14 @@ local function buildSettingsUI()
         Title = "🔄 Refresh Props",
         Description = "Refresh the prop list",
         Callback = function()
-            findProps()
-            Fluent:Notify({
-                Title = "Refreshed",
-                Content = "Found " .. #propList .. " props (using " .. totalProps .. ")",
-                Duration = 3
-            })
+            pcall(function()
+                findProps()
+                Fluent:Notify({
+                    Title = "Refreshed",
+                    Content = "Found " .. #propList .. " props (using " .. totalProps .. ")",
+                    Duration = 3
+                })
+            end)
         end
     })
     
@@ -622,19 +647,21 @@ end
 task.spawn(function()
     repeat task.wait() until game:IsLoaded()
     
-    findProps()
-    
-    buildCommonUI()
-    buildUncommonUI()
-    buildRareUI()
-    buildEpicUI()
-    buildLegendaryUI()
-    buildMythicUI()
-    buildSecretUI()
-    buildControlsUI()
-    buildSettingsUI()
-    
-    Window:SelectTab(1)
+    pcall(function()
+        findProps()
+        
+        buildCommonUI()
+        buildUncommonUI()
+        buildRareUI()
+        buildEpicUI()
+        buildLegendaryUI()
+        buildMythicUI()
+        buildSecretUI()
+        buildControlsUI()
+        buildSettingsUI()
+        
+        Window:SelectTab(1)
+    end)
     
     Fluent:Notify({
         Title = "MANI PROP GUI V.1",
@@ -658,17 +685,19 @@ task.spawn(function()
 end)
 
 -- Addons setup
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("MANIPropGUI")
-SaveManager:SetFolder("MANIPropGUI/props")
-
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
-
-SaveManager:LoadAutoloadConfig()
+pcall(function()
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({})
+    InterfaceManager:SetFolder("MANIPropGUI")
+    SaveManager:SetFolder("MANIPropGUI/props")
+    
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+    SaveManager:BuildConfigSection(Tabs.Settings)
+    
+    SaveManager:LoadAutoloadConfig()
+end)
 
 -- Auto-stop aura when player respawns
 game.Players.LocalPlayer.CharacterAdded:Connect(function()
