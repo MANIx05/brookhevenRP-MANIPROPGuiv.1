@@ -1,5 +1,5 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- Fixed: minimize toggles, full-screen toggle, aura follows player, props work
+-- Fixed: props work + unique aura motion engine + live user profile card
 
 local AllAuraConfigs = {
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
@@ -146,6 +146,141 @@ local AllAuraConfigs = {
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- =========================================================
+-- PROFILE CARD
+-- Shows who is currently using the GUI.
+-- =========================================================
+
+local profileGui = nil
+local profileStatus = nil
+local profileAura = nil
+local profileProps = nil
+
+local function createProfileCard(parent)
+    if profileGui then
+        pcall(function() profileGui:Destroy() end)
+        profileGui = nil
+    end
+
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then
+        return
+    end
+
+    profileGui = Instance.new("ScreenGui")
+    profileGui.Name = "MANIPropProfile"
+    profileGui.ResetOnSpawn = false
+    profileGui.DisplayOrder = 100
+    profileGui.IgnoreGuiInset = true
+    profileGui.Parent = playerGui
+
+    local card = Instance.new("Frame")
+    card.Name = "ProfileCard"
+    card.Size = UDim2.fromOffset(265, 76)
+    card.Position = UDim2.new(0, 12, 0, 12)
+    card.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    card.BackgroundTransparency = 0.08
+    card.BorderSizePixel = 0
+    card.Parent = profileGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = card
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Transparency = 0.45
+    stroke.Parent = card
+
+    local avatar = Instance.new("ImageLabel")
+    avatar.Name = "Avatar"
+    avatar.Size = UDim2.fromOffset(58, 58)
+    avatar.Position = UDim2.fromOffset(9, 9)
+    avatar.BackgroundTransparency = 1
+    avatar.Parent = card
+
+    local avatarCorner = Instance.new("UICorner")
+    avatarCorner.CornerRadius = UDim.new(1, 0)
+    avatarCorner.Parent = avatar
+
+    local ok, image = pcall(function()
+        return Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size100x100
+        )
+    end)
+
+    if ok and image then
+        avatar.Image = image
+    end
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, -78, 0, 23)
+    nameLabel.Position = UDim2.fromOffset(76, 7)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = LocalPlayer.DisplayName
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextSize = 17
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = card
+
+    local userLabel = Instance.new("TextLabel")
+    userLabel.Size = UDim2.new(1, -78, 0, 18)
+    userLabel.Position = UDim2.fromOffset(76, 28)
+    userLabel.BackgroundTransparency = 1
+    userLabel.Text = "@" .. LocalPlayer.Name
+    userLabel.TextColor3 = Color3.fromRGB(175, 175, 185)
+    userLabel.TextSize = 12
+    userLabel.Font = Enum.Font.Gotham
+    userLabel.TextXAlignment = Enum.TextXAlignment.Left
+    userLabel.Parent = card
+
+    profileStatus = Instance.new("TextLabel")
+    profileStatus.Size = UDim2.new(1, -78, 0, 17)
+    profileStatus.Position = UDim2.fromOffset(76, 48)
+    profileStatus.BackgroundTransparency = 1
+    profileStatus.Text = "● MANI PROP • Ready"
+    profileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
+    profileStatus.TextSize = 11
+    profileStatus.Font = Enum.Font.GothamMedium
+    profileStatus.TextXAlignment = Enum.TextXAlignment.Left
+    profileStatus.Parent = card
+
+    -- Tooltip/status line changes with the active aura.
+    task.spawn(function()
+        while profileGui and profileGui.Parent do
+            pcall(function()
+                if profileAura then
+                    profileStatus.Text = "● Using: " .. profileAura
+                    profileStatus.TextColor3 = Color3.fromRGB(120, 210, 255)
+                elseif profileStatus then
+                    profileStatus.Text = "● MANI PROP • Ready"
+                    profileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
+                end
+            end)
+            task.wait(0.5)
+        end
+    end)
+
+    return profileGui
+end
+
+local function updateProfileAura()
+    if profileStatus then
+        if currentAura and AllAuraConfigs[currentAura] then
+            profileAura = AllAuraConfigs[currentAura].name
+            profileStatus.Text = "● Using: " .. profileAura
+            profileStatus.TextColor3 = Color3.fromRGB(120, 210, 255)
+        else
+            profileAura = nil
+            profileStatus.Text = "● MANI PROP • Ready"
+            profileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
+        end
+    end
+end
+
 local currentAura = nil
 local auraRunning = false
 local auraThread = nil
@@ -265,66 +400,152 @@ local function getCharacter()
     return character
 end
 
-local function getAuraCFrame(config, index, total, elapsed, center)
+-- =========================================================
+-- AURA STYLE ENGINE V2
+-- Every aura gets a deterministic visual "signature" from its
+-- key/name, while still respecting the original config values.
+-- =========================================================
+
+local function auraHash(text)
+    local h = 0
+    for i = 1, #text do
+        h = (h * 31 + string.byte(text, i)) % 100000
+    end
+    return h
+end
+
+local function getAuraStyle(auraKey, config)
+    local h = auraHash(tostring(auraKey) .. "|" .. tostring(config.name))
+    return {
+        style = (h % 12) + 1,
+        phase = (h % 628) / 100,
+        pulse = 0.55 + ((math.floor(h / 7) % 100) / 100) * 0.9,
+        wave = 0.45 + ((math.floor(h / 17) % 100) / 100) * 1.4,
+        height = 0.7 + ((math.floor(h / 29) % 100) / 100) * 1.8,
+        twist = ((math.floor(h / 37) % 360) - 180) * math.pi / 180,
+        tilt = ((math.floor(h / 43) % 40) - 20) * math.pi / 180,
+        direction = (h % 2 == 0) and 1 or -1,
+        petals = 3 + (h % 7),
+        inner = 0.48 + ((math.floor(h / 53) % 30) / 100),
+        outer = 0.92 + ((math.floor(h / 61) % 35) / 100),
+    }
+end
+
+local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
     local speed = tonumber(config.speed) or 0.5
     local baseRadius = tonumber(config.radius) or 12
     local baseY = tonumber(config.offsetY) or 0
     local rotation = math.rad(tonumber(config.rotation) or 0)
 
-    local angle = ((2 * math.pi) / total) * index
-        + elapsed * speed
-        + rotation
+    local style = getAuraStyle(auraKey, config)
+
+    -- Normalized prop position around the formation.
+    local t = (index - 1) / math.max(total, 1)
+    local baseAngle = ((2 * math.pi) * t)
+    local time = elapsed * speed * style.direction
+    local angle = baseAngle + time + rotation + style.phase
 
     local radius = baseRadius
     local y = baseY
 
-    if config.type == "wave" then
-        radius = baseRadius
-            + math.sin(angle * 3 + elapsed * speed * 2) * 2
+    -- Twelve distinct visual families. The original config.type
+    -- remains meaningful, but these variants stop every aura from
+    -- looking like the same basic circle.
+    if style.style == 1 then
+        -- Breathing Halo
+        radius = baseRadius * (1 + math.sin(time * 1.7 + index * 0.45) * 0.10)
+        y = baseY + math.sin(time * 2 + index) * 0.45
 
-        y = baseY
-            + math.sin(elapsed * speed * 2 + index) * 0.75
+    elseif style.style == 2 then
+        -- Flower / Petal Orbit
+        local petal = math.sin(angle * style.petals + time * 0.8)
+        radius = baseRadius * (0.82 + 0.25 * math.abs(petal))
+        y = baseY + math.cos(angle * 2 + time) * 0.55
 
-    elseif config.type == "spiral" then
-        radius = baseRadius
-            + (index / total) * 3
-            + math.sin(elapsed * speed) * 1
+    elseif style.style == 3 then
+        -- Vertical Helix
+        radius = baseRadius * (0.78 + 0.18 * math.sin(t * math.pi * 2 + time))
+        y = baseY + math.sin(t * math.pi * 2 + time * 1.4) * style.height * 2
 
-        y = baseY
-            + ((index / total) - 0.5) * 3
-            + math.sin(elapsed * speed + index) * 0.5
+    elseif style.style == 4 then
+        -- Sharp Star
+        local star = math.abs(math.cos(angle * 5 + time * 0.7))
+        radius = baseRadius * (0.58 + 0.52 * star)
+        y = baseY + math.sin(time * 2 + index * 0.7) * 0.7
 
-    elseif config.type == "star" then
-        if index % 2 == 0 then
-            radius = baseRadius * 0.60
-                + math.sin(elapsed * speed + index) * 0.5
-        else
-            radius = baseRadius
-                + math.sin(elapsed * speed + index) * 0.5
-        end
+    elseif style.style == 5 then
+        -- Double Orbit / Infinity
+        local side = (index % 2 == 0) and 1 or -1
+        radius = baseRadius * (side == 1 and style.outer or style.inner)
+        angle = angle + side * (math.pi / 7)
+        y = baseY + side * 1.35 + math.sin(time + index) * 0.35
 
-        y = baseY
-            + math.sin(elapsed * speed * 2 + index) * 0.8
+    elseif style.style == 6 then
+        -- Wave Ring
+        radius = baseRadius + math.sin(angle * 3 + time * 2.2) * (1.2 + style.wave)
+        y = baseY + math.sin(angle * 2 + time * 1.6) * style.height
 
-    elseif config.type == "double" then
-        if index % 2 == 0 then
-            radius = baseRadius * 1.20
-                + math.sin(elapsed * speed + index) * 0.3
+    elseif style.style == 7 then
+        -- Vortex
+        local depth = (t - 0.5) * 2
+        radius = baseRadius * (0.55 + 0.7 * (1 - math.abs(depth) * 0.35))
+        angle = angle + depth * 2.2 + time * 0.35
+        y = baseY + depth * style.height * 2.4
 
-            y = baseY + 1
-                + math.sin(elapsed * speed * 0.5 + index) * 0.7
-        else
-            radius = baseRadius * 0.80
-                + math.sin(elapsed * speed + index) * 0.3
+    elseif style.style == 8 then
+        -- Crown
+        local crown = math.sin(angle * 4 + time)
+        radius = baseRadius * (0.72 + 0.30 * math.max(crown, 0))
+        y = baseY + 1.8 + math.max(crown, 0) * 2.4
 
-            y = baseY - 1
-                + math.sin(elapsed * speed * 0.5 + index) * 0.7
-        end
-    else
-        -- circle / unknown types
-        y = baseY
-            + math.sin(elapsed * speed + index) * 0.5
+    elseif style.style == 9 then
+        -- Comet / trailing orbit
+        local trail = (index - 1) / math.max(total - 1, 1)
+        radius = baseRadius * (0.62 + trail * 0.48)
+        angle = angle - trail * 1.35
+        y = baseY + math.sin(time * 1.5 + trail * math.pi * 2) * 1.1
+
+    elseif style.style == 10 then
+        -- Galaxy
+        local arm = math.sin(t * math.pi * 2 * 2 + time)
+        radius = baseRadius * (0.55 + 0.52 * math.abs(arm))
+        angle = angle + arm * 0.9
+        y = baseY + math.sin(t * math.pi * 4 + time * 0.8) * 2
+
+    elseif style.style == 11 then
+        -- Pulsing Diamond
+        local diamond = 1 - math.abs(math.sin(angle * 4 + time))
+        radius = baseRadius * (0.65 + diamond * 0.55)
+        y = baseY + math.cos(angle * 4 + time) * 0.9
+
+    elseif style.style == 12 then
+        -- Orbital Rings
+        local side = (index % 3) - 1
+        radius = baseRadius * (1 + side * 0.18)
+        angle = angle + side * 0.8
+        y = baseY + side * 1.7 + math.sin(time * 1.8 + index) * 0.5
     end
+
+    -- Preserve the original type as an additional movement layer.
+    if config.type == "wave" then
+        radius += math.sin(angle * 3 + time * 1.7) * 1.15
+        y += math.sin(time * 2 + index) * 0.55
+    elseif config.type == "spiral" then
+        radius += t * 2.5
+        y += (t - 0.5) * 2.0
+        angle += t * 1.8
+    elseif config.type == "star" then
+        radius *= (index % 2 == 0) and 0.68 or 1.08
+    elseif config.type == "double" then
+        local side = (index % 2 == 0) and 1 or -1
+        radius *= (side == 1) and 1.12 or 0.82
+        y += side * 0.75
+    end
+
+    -- Small universal breathing motion keeps static-looking styles alive.
+    local breathe = math.sin(elapsed * speed * 2.4 + index * 0.31 + style.phase)
+    radius += breathe * 0.35
+    y += math.cos(elapsed * speed * 1.8 + index * 0.43) * 0.22
 
     local position = center + Vector3.new(
         math.cos(angle) * radius,
@@ -332,9 +553,13 @@ local function getAuraCFrame(config, index, total, elapsed, center)
         math.sin(angle) * radius
     )
 
-    -- Every prop faces the player, just like the working
-    -- prop-handle example.
-    return CFrame.lookAt(position, center)
+    -- Give each style a slightly different facing/tilt.
+    local look = CFrame.lookAt(position, center)
+    return look * CFrame.Angles(
+        math.sin(angle + style.twist) * style.tilt,
+        angle * 0.15,
+        math.cos(angle + style.phase) * style.tilt
+    )
 end
 
 local function runAuraAnimation(auraKey, config, token)
@@ -382,6 +607,7 @@ local function runAuraAnimation(auraKey, config, token)
 
                 if prop and prop.Parent then
                     local target = getAuraCFrame(
+                        auraKey,
                         config,
                         index,
                         total,
@@ -408,6 +634,7 @@ local function stopAura()
     -- Do not coroutine.close() a running thread. Let the token/state
     -- condition end it safely.
     auraThread = nil
+    updateProfileAura()
 end
 
 local function startAura(auraKey)
@@ -439,6 +666,8 @@ local function startAura(auraKey)
     auraThread = task.spawn(function()
         runAuraAnimation(auraKey, config, myToken)
     end)
+
+    updateProfileAura()
 
     print(
         config.color
@@ -496,6 +725,7 @@ local guiVisible = true
 local isFull = false
 
 if UseFluent and Fluent then
+    createProfileCard()
     local SaveManager, InterfaceManager
     pcall(function()
         SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
@@ -542,7 +772,7 @@ if UseFluent and Fluent then
                 if config then
                     tab:AddButton({
                         Title = config.name,
-                        Description = "",
+                        Description = config.type .. " • unique motion signature",
                         Callback = function() startAura(key) end
                     })
                 end
@@ -584,6 +814,23 @@ if UseFluent and Fluent then
 
     -- Settings tab with full-screen toggle
     local propLabel = Tabs.St:AddParagraph({ Title = "📊 Props", Content = "Checking..." })
+
+    local profileLabel = Tabs.St:AddParagraph({
+        Title = "👤 Current User",
+        Content = "Loading profile..."
+    })
+
+    pcall(function()
+        profileLabel:SetContent(
+            LocalPlayer.DisplayName
+            .. "\n@"
+            .. LocalPlayer.Name
+            .. "\nUserId: "
+            .. tostring(LocalPlayer.UserId)
+        )
+    end)
+
+
     task.spawn(function()
         while true do
             pcall(function()
@@ -605,7 +852,7 @@ if UseFluent and Fluent then
         Window:SetSize(isFull and fullSize or compactSize)
         if Fluent then Fluent:Notify({Title=isFull and "Full" or "Compact", Content="Size changed", Duration=2}) end
     end })
-    Tabs.St:AddParagraph({ Title = "📖 Info", Content = "139 auras • Auto 1-25 props" })
+    Tabs.St:AddParagraph({ Title = "📖 Info", Content = "139 auras • 12+ visual motion styles • Auto 1-25 props • Profile card enabled" })
 
     task.spawn(function()
         repeat task.wait() until game:IsLoaded()
@@ -633,6 +880,12 @@ if UseFluent and Fluent then
     LocalPlayer.CharacterAdded:Connect(function()
         local savedAura = currentAura
 
+        task.defer(function()
+            pcall(function()
+                createProfileCard()
+            end)
+        end)
+
         if savedAura then
             stopAura()
 
@@ -647,6 +900,7 @@ if UseFluent and Fluent then
     end)
 
 else
+    createProfileCard()
     -- Fallback GUI with minimize and full-screen toggle
     local player = game.Players.LocalPlayer
     local gui = Instance.new("ScreenGui")
@@ -794,6 +1048,12 @@ else
 
     LocalPlayer.CharacterAdded:Connect(function()
         local savedAura = currentAura
+
+        task.defer(function()
+            pcall(function()
+                createProfileCard()
+            end)
+        end)
 
         if savedAura then
             stopAura()
