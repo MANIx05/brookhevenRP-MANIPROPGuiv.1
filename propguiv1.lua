@@ -1,5 +1,5 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- Fixed: GUI now shows all auras, props work perfectly
+-- Fixed: GUI shows all content, automatic canvas size, all auras work
 
 local AllAuraConfigs = {
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
@@ -151,7 +151,7 @@ local centerPosition = nil
 local propFolder = nil
 local totalProps = 0
 
--- Exact prop detection
+-- Prop detection
 local function findProps()
     propList = {}
     local player = game.Players.LocalPlayer
@@ -204,14 +204,13 @@ local function findProps()
     return true
 end
 
+-- Aura animation
 local function runAuraAnimation(config)
     if auraRunning then return end
     auraRunning = true
     local player = game.Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
     local useProps = totalProps
-
-    print("▶️ Aura started: " .. config.name .. " with " .. useProps .. " props")
 
     while auraRunning do
         if not char or not char.Parent then
@@ -282,7 +281,6 @@ local function stopAura()
         auraCoroutine = nil
     end
     currentAura = nil
-    print("⏹️ Aura stopped")
 end
 
 local function startAura(auraKey)
@@ -310,7 +308,7 @@ local function startAura(auraKey)
     print("🚀 " .. config.color .. " " .. config.name .. " activated with " .. totalProps .. " props")
 end
 
--- ====== GUI ======
+-- ===== GUI =====
 local player = game.Players.LocalPlayer
 local gui = Instance.new("ScreenGui")
 gui.Name = "MANIPropGUI"
@@ -335,7 +333,6 @@ title.TextScaled = true
 title.Font = Enum.Font.Bold
 title.Parent = frame
 
--- Status label (shows props count)
 local status = Instance.new("TextLabel")
 status.Size = UDim2.new(1, 0, 0, 18)
 status.Position = UDim2.new(0, 0, 0, 30)
@@ -346,7 +343,6 @@ status.TextScaled = true
 status.Font = Enum.Font.Regular
 status.Parent = frame
 
--- Minimize button
 local minBtn = Instance.new("TextButton")
 minBtn.Size = UDim2.new(0, 28, 0, 22)
 minBtn.Position = UDim2.new(1, -60, 0, 4)
@@ -375,8 +371,9 @@ local scroll = Instance.new("ScrollingFrame")
 scroll.Size = UDim2.new(1, -10, 1, -100)
 scroll.Position = UDim2.new(0, 5, 0, 52)
 scroll.BackgroundTransparency = 1
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.ScrollBarThickness = 4
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y  -- Key fix: auto canvas height
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.Parent = frame
 
 local layout = Instance.new("UIListLayout")
@@ -384,18 +381,6 @@ layout.Padding = UDim.new(0, 2)
 layout.FillDirection = Enum.FillDirection.Vertical
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = scroll
-
--- Update canvas size when layout changes
-local function updateCanvas()
-    local totalHeight = 0
-    for _, child in ipairs(scroll:GetChildren()) do
-        if child:IsA("GuiObject") then
-            totalHeight = totalHeight + child.Size.Y.Offset + (layout.Padding.Offset or 2)
-        end
-    end
-    scroll.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
-end
-layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
 
 local commonList = {"SoftGlow","FreshBreeze","CalmRing","TinyOrbit","SimpleHalo","FloatingMist","GentleWave","LightBloom","MiniSpiral","CloudRing","SoftOrbit","BrightCircle","PeaceAura","BreezeHalo","MorningGlow","FloatingStars","LittleGalaxy","DreamRing","PureHalo","SkyBloom"}
 local uncommonList = {"AquaOrbit","FrostRing","CrystalWave","WindSpiral","Rainfall","BlueComet","IceHalo","MistSpiral","OceanRing","CloudSpiral","SnowOrbit","SilverBloom","MoonRing","StarOrbit","SkySpiral","FrozenHalo","CrystalOrbit","TidalWave","WinterBloom","ArcticRing"}
@@ -441,11 +426,7 @@ createCategory("🔴 Legendary", legendaryList)
 createCategory("🟡 Mythic", mythicList)
 createCategory("💠 Secret", secretList)
 
--- Force canvas update after all elements added
-task.wait(0.1)
-updateCanvas()
-
--- Bottom buttons
+-- bottom buttons frame
 local bottomFrame = Instance.new("Frame")
 bottomFrame.Size = UDim2.new(1, 0, 0, 30)
 bottomFrame.Position = UDim2.new(0, 0, 1, -30)
@@ -488,7 +469,6 @@ resetBtn.MouseButton1Click:Connect(function()
                 end
             end)
         end
-        print("🔄 Props reset to center")
     end
 end)
 
@@ -515,12 +495,10 @@ sizeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Auto-stop on respawn
 game.Players.LocalPlayer.CharacterAdded:Connect(function()
     stopAura()
 end)
 
--- Initial prop detection
 findProps()
 status.Text = "Props: " .. #propList .. " (using " .. totalProps .. ")"
 print("✅ MANI PROP GUI loaded. Props found: " .. #propList .. " (using " .. totalProps .. ")")
