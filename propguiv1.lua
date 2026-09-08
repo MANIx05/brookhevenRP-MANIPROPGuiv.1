@@ -1,5 +1,5 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- Fixed: props work + unique aura motion engine + live user profile card
+-- Fixed: minimize toggles, full-screen toggle, aura follows player, props work
 
 local AllAuraConfigs = {
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
@@ -146,145 +146,11 @@ local AllAuraConfigs = {
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- =========================================================
--- PROFILE CARD
--- Shows who is currently using the GUI.
--- =========================================================
-
-local profileGui = nil
-local profileStatus = nil
-local profileAura = nil
-local profileProps = nil
-
-local function createProfileCard(parent)
-    if profileGui then
-        pcall(function() profileGui:Destroy() end)
-        profileGui = nil
-    end
-
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then
-        return
-    end
-
-    profileGui = Instance.new("ScreenGui")
-    profileGui.Name = "MANIPropProfile"
-    profileGui.ResetOnSpawn = false
-    profileGui.DisplayOrder = 100
-    profileGui.IgnoreGuiInset = true
-    profileGui.Parent = playerGui
-
-    local card = Instance.new("Frame")
-    card.Name = "ProfileCard"
-    card.Size = UDim2.fromOffset(265, 76)
-    card.Position = UDim2.new(0, 12, 0, 12)
-    card.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-    card.BackgroundTransparency = 0.08
-    card.BorderSizePixel = 0
-    card.Parent = profileGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = card
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1
-    stroke.Transparency = 0.45
-    stroke.Parent = card
-
-    local avatar = Instance.new("ImageLabel")
-    avatar.Name = "Avatar"
-    avatar.Size = UDim2.fromOffset(58, 58)
-    avatar.Position = UDim2.fromOffset(9, 9)
-    avatar.BackgroundTransparency = 1
-    avatar.Parent = card
-
-    local avatarCorner = Instance.new("UICorner")
-    avatarCorner.CornerRadius = UDim.new(1, 0)
-    avatarCorner.Parent = avatar
-
-    local ok, image = pcall(function()
-        return Players:GetUserThumbnailAsync(
-            LocalPlayer.UserId,
-            Enum.ThumbnailType.HeadShot,
-            Enum.ThumbnailSize.Size100x100
-        )
-    end)
-
-    if ok and image then
-        avatar.Image = image
-    end
-
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(1, -78, 0, 23)
-    nameLabel.Position = UDim2.fromOffset(76, 7)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = LocalPlayer.DisplayName
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    nameLabel.TextSize = 17
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.Parent = card
-
-    local userLabel = Instance.new("TextLabel")
-    userLabel.Size = UDim2.new(1, -78, 0, 18)
-    userLabel.Position = UDim2.fromOffset(76, 28)
-    userLabel.BackgroundTransparency = 1
-    userLabel.Text = "@" .. LocalPlayer.Name
-    userLabel.TextColor3 = Color3.fromRGB(175, 175, 185)
-    userLabel.TextSize = 12
-    userLabel.Font = Enum.Font.Gotham
-    userLabel.TextXAlignment = Enum.TextXAlignment.Left
-    userLabel.Parent = card
-
-    profileStatus = Instance.new("TextLabel")
-    profileStatus.Size = UDim2.new(1, -78, 0, 17)
-    profileStatus.Position = UDim2.fromOffset(76, 48)
-    profileStatus.BackgroundTransparency = 1
-    profileStatus.Text = "● MANI PROP • Ready"
-    profileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
-    profileStatus.TextSize = 11
-    profileStatus.Font = Enum.Font.GothamMedium
-    profileStatus.TextXAlignment = Enum.TextXAlignment.Left
-    profileStatus.Parent = card
-
-    -- Tooltip/status line changes with the active aura.
-    task.spawn(function()
-        while profileGui and profileGui.Parent do
-            pcall(function()
-                if profileAura then
-                    profileStatus.Text = "● Using: " .. profileAura
-                    profileStatus.TextColor3 = Color3.fromRGB(120, 210, 255)
-                elseif profileStatus then
-                    profileStatus.Text = "● MANI PROP • Ready"
-                    profileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
-                end
-            end)
-            task.wait(0.5)
-        end
-    end)
-
-    return profileGui
-end
-
-local function updateProfileAura()
-    if profileStatus then
-        if currentAura and AllAuraConfigs[currentAura] then
-            profileAura = AllAuraConfigs[currentAura].name
-            profileStatus.Text = "● Using: " .. profileAura
-            profileStatus.TextColor3 = Color3.fromRGB(120, 210, 255)
-        else
-            profileAura = nil
-            profileStatus.Text = "● MANI PROP • Ready"
-            profileStatus.TextColor3 = Color3.fromRGB(120, 255, 150)
-        end
-    end
-end
-
 local currentAura = nil
 local auraRunning = false
 local auraThread = nil
 local auraToken = 0
+local stopSnake
 
 local propList = {}
 local centerPosition = nil
@@ -400,11 +266,15 @@ local function getCharacter()
     return character
 end
 
+
 -- =========================================================
--- AURA STYLE ENGINE V2
--- Every aura gets a deterministic visual "signature" from its
--- key/name, while still respecting the original config values.
+-- AURA ENGINE V3
+-- Smooth, deterministic and visually different formations.
+-- Styles are cached once per aura to avoid rebuilding tables
+-- every frame.
 -- =========================================================
+
+local auraStyleCache = {}
 
 local function auraHash(text)
     local h = 0
@@ -415,20 +285,27 @@ local function auraHash(text)
 end
 
 local function getAuraStyle(auraKey, config)
+    local cached = auraStyleCache[auraKey]
+    if cached then
+        return cached
+    end
+
     local h = auraHash(tostring(auraKey) .. "|" .. tostring(config.name))
-    return {
-        style = (h % 12) + 1,
+    cached = {
+        style = (h % 14) + 1,
         phase = (h % 628) / 100,
-        pulse = 0.55 + ((math.floor(h / 7) % 100) / 100) * 0.9,
-        wave = 0.45 + ((math.floor(h / 17) % 100) / 100) * 1.4,
-        height = 0.7 + ((math.floor(h / 29) % 100) / 100) * 1.8,
+        wave = 0.7 + ((math.floor(h / 17) % 100) / 100) * 1.8,
+        height = 0.7 + ((math.floor(h / 29) % 100) / 100) * 2.0,
         twist = ((math.floor(h / 37) % 360) - 180) * math.pi / 180,
-        tilt = ((math.floor(h / 43) % 40) - 20) * math.pi / 180,
+        tilt = ((math.floor(h / 43) % 28) - 14) * math.pi / 180,
         direction = (h % 2 == 0) and 1 or -1,
-        petals = 3 + (h % 7),
-        inner = 0.48 + ((math.floor(h / 53) % 30) / 100),
-        outer = 0.92 + ((math.floor(h / 61) % 35) / 100),
+        petals = 3 + (h % 8),
+        inner = 0.55 + ((math.floor(h / 53) % 25) / 100),
+        outer = 0.95 + ((math.floor(h / 61) % 30) / 100),
+        speedMul = 0.78 + ((math.floor(h / 71) % 45) / 100),
     }
+    auraStyleCache[auraKey] = cached
+    return cached
 end
 
 local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
@@ -436,102 +313,111 @@ local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
     local baseRadius = tonumber(config.radius) or 12
     local baseY = tonumber(config.offsetY) or 0
     local rotation = math.rad(tonumber(config.rotation) or 0)
-
     local style = getAuraStyle(auraKey, config)
 
-    -- Normalized prop position around the formation.
     local t = (index - 1) / math.max(total, 1)
-    local baseAngle = ((2 * math.pi) * t)
-    local time = elapsed * speed * style.direction
+    local baseAngle = math.pi * 2 * t
+    local time = elapsed * speed * style.speedMul * style.direction
     local angle = baseAngle + time + rotation + style.phase
 
     local radius = baseRadius
     local y = baseY
 
-    -- Twelve distinct visual families. The original config.type
-    -- remains meaningful, but these variants stop every aura from
-    -- looking like the same basic circle.
     if style.style == 1 then
-        -- Breathing Halo
-        radius = baseRadius * (1 + math.sin(time * 1.7 + index * 0.45) * 0.10)
-        y = baseY + math.sin(time * 2 + index) * 0.45
+        -- Smooth breathing halo
+        local breath = 0.5 + 0.5 * math.sin(time * 1.65 + index * 0.22)
+        radius = baseRadius * (0.90 + breath * 0.16)
+        y = baseY + math.sin(time * 1.9 + index * 0.35) * 0.55
 
     elseif style.style == 2 then
-        -- Flower / Petal Orbit
-        local petal = math.sin(angle * style.petals + time * 0.8)
-        radius = baseRadius * (0.82 + 0.25 * math.abs(petal))
-        y = baseY + math.cos(angle * 2 + time) * 0.55
+        -- Flower / petals
+        local petal = math.sin(angle * style.petals + time * 0.55)
+        radius = baseRadius * (0.72 + math.abs(petal) * 0.34)
+        y = baseY + math.cos(angle * 2 + time) * 0.65
 
     elseif style.style == 3 then
-        -- Vertical Helix
-        radius = baseRadius * (0.78 + 0.18 * math.sin(t * math.pi * 2 + time))
-        y = baseY + math.sin(t * math.pi * 2 + time * 1.4) * style.height * 2
+        -- Helix
+        radius = baseRadius * (0.76 + 0.20 * math.sin(t * math.pi * 2 + time))
+        y = baseY + math.sin(t * math.pi * 2 + time * 1.35) * style.height * 1.55
 
     elseif style.style == 4 then
-        -- Sharp Star
-        local star = math.abs(math.cos(angle * 5 + time * 0.7))
-        radius = baseRadius * (0.58 + 0.52 * star)
-        y = baseY + math.sin(time * 2 + index * 0.7) * 0.7
+        -- Star
+        local star = math.abs(math.cos(angle * 5 + time * 0.65))
+        radius = baseRadius * (0.56 + 0.55 * star)
+        y = baseY + math.sin(time * 1.7 + index * 0.52) * 0.85
 
     elseif style.style == 5 then
-        -- Double Orbit / Infinity
+        -- Infinity / double orbit
         local side = (index % 2 == 0) and 1 or -1
-        radius = baseRadius * (side == 1 and style.outer or style.inner)
-        angle = angle + side * (math.pi / 7)
-        y = baseY + side * 1.35 + math.sin(time + index) * 0.35
+        radius = baseRadius * ((side == 1) and style.outer or style.inner)
+        angle = angle + side * (math.pi / 8)
+        y = baseY + side * 1.45 + math.sin(time * 1.2 + index) * 0.4
 
     elseif style.style == 6 then
-        -- Wave Ring
-        radius = baseRadius + math.sin(angle * 3 + time * 2.2) * (1.2 + style.wave)
-        y = baseY + math.sin(angle * 2 + time * 1.6) * style.height
+        -- Flowing wave
+        radius = baseRadius + math.sin(angle * 3 + time * 1.9) * (1.1 + style.wave)
+        y = baseY + math.sin(angle * 2 + time * 1.4) * style.height
 
     elseif style.style == 7 then
         -- Vortex
         local depth = (t - 0.5) * 2
-        radius = baseRadius * (0.55 + 0.7 * (1 - math.abs(depth) * 0.35))
-        angle = angle + depth * 2.2 + time * 0.35
-        y = baseY + depth * style.height * 2.4
+        radius = baseRadius * (0.54 + 0.76 * (1 - math.abs(depth) * 0.28))
+        angle = angle + depth * 2.35 + time * 0.38
+        y = baseY + depth * style.height * 2.2
 
     elseif style.style == 8 then
         -- Crown
-        local crown = math.sin(angle * 4 + time)
-        radius = baseRadius * (0.72 + 0.30 * math.max(crown, 0))
-        y = baseY + 1.8 + math.max(crown, 0) * 2.4
+        local crown = math.sin(angle * 4 + time * 0.8)
+        radius = baseRadius * (0.70 + 0.32 * math.max(crown, 0))
+        y = baseY + 1.5 + math.max(crown, 0) * 2.7
 
     elseif style.style == 9 then
-        -- Comet / trailing orbit
-        local trail = (index - 1) / math.max(total - 1, 1)
-        radius = baseRadius * (0.62 + trail * 0.48)
-        angle = angle - trail * 1.35
-        y = baseY + math.sin(time * 1.5 + trail * math.pi * 2) * 1.1
+        -- Comet
+        local trail = t
+        radius = baseRadius * (0.58 + trail * 0.50)
+        angle = angle - trail * 1.45
+        y = baseY + math.sin(time * 1.45 + trail * math.pi * 2) * 1.25
 
     elseif style.style == 10 then
-        -- Galaxy
-        local arm = math.sin(t * math.pi * 2 * 2 + time)
-        radius = baseRadius * (0.55 + 0.52 * math.abs(arm))
-        angle = angle + arm * 0.9
-        y = baseY + math.sin(t * math.pi * 4 + time * 0.8) * 2
+        -- Galaxy arms
+        local arm = math.sin(t * math.pi * 4 + time)
+        radius = baseRadius * (0.52 + 0.58 * math.abs(arm))
+        angle = angle + arm * 1.05
+        y = baseY + math.sin(t * math.pi * 4 + time * 0.75) * 2.15
 
     elseif style.style == 11 then
-        -- Pulsing Diamond
+        -- Diamond pulse
         local diamond = 1 - math.abs(math.sin(angle * 4 + time))
-        radius = baseRadius * (0.65 + diamond * 0.55)
-        y = baseY + math.cos(angle * 4 + time) * 0.9
+        radius = baseRadius * (0.62 + diamond * 0.58)
+        y = baseY + math.cos(angle * 4 + time) * 1.0
 
     elseif style.style == 12 then
-        -- Orbital Rings
-        local side = (index % 3) - 1
-        radius = baseRadius * (1 + side * 0.18)
-        angle = angle + side * 0.8
-        y = baseY + side * 1.7 + math.sin(time * 1.8 + index) * 0.5
+        -- Three orbital lanes
+        local lane = (index % 3) - 1
+        radius = baseRadius * (1 + lane * 0.17)
+        angle = angle + lane * 0.82
+        y = baseY + lane * 1.65 + math.sin(time * 1.6 + index) * 0.5
+
+    elseif style.style == 13 then
+        -- Ripple sphere
+        local wave = math.sin(t * math.pi * 2 + time * 1.2)
+        radius = baseRadius * (0.72 + math.abs(wave) * 0.42)
+        y = baseY + math.cos(t * math.pi * 4 + time) * 2.0
+
+    else
+        -- Slow orbital ribbon
+        local ribbon = math.sin(t * math.pi * 2 + time)
+        radius = baseRadius * (0.82 + ribbon * 0.20)
+        angle = angle + math.sin(time * 0.55) * 0.65
+        y = baseY + ribbon * 2.4
     end
 
-    -- Preserve the original type as an additional movement layer.
+    -- Original aura type is still respected as a secondary motion layer.
     if config.type == "wave" then
-        radius += math.sin(angle * 3 + time * 1.7) * 1.15
-        y += math.sin(time * 2 + index) * 0.55
+        radius += math.sin(angle * 3 + time * 1.65) * 1.25
+        y += math.sin(time * 2 + index * 0.6) * 0.55
     elseif config.type == "spiral" then
-        radius += t * 2.5
+        radius += t * 2.8
         y += (t - 0.5) * 2.0
         angle += t * 1.8
     elseif config.type == "star" then
@@ -539,13 +425,12 @@ local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
     elseif config.type == "double" then
         local side = (index % 2 == 0) and 1 or -1
         radius *= (side == 1) and 1.12 or 0.82
-        y += side * 0.75
+        y += side * 0.72
     end
 
-    -- Small universal breathing motion keeps static-looking styles alive.
-    local breathe = math.sin(elapsed * speed * 2.4 + index * 0.31 + style.phase)
-    radius += breathe * 0.35
-    y += math.cos(elapsed * speed * 1.8 + index * 0.43) * 0.22
+    -- Universal micro-motion prevents dead/static frames.
+    radius += math.sin(elapsed * speed * 2.0 + index * 0.31 + style.phase) * 0.28
+    y += math.cos(elapsed * speed * 1.65 + index * 0.43) * 0.20
 
     local position = center + Vector3.new(
         math.cos(angle) * radius,
@@ -553,17 +438,16 @@ local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
         math.sin(angle) * radius
     )
 
-    -- Give each style a slightly different facing/tilt.
     local look = CFrame.lookAt(position, center)
     return look * CFrame.Angles(
         math.sin(angle + style.twist) * style.tilt,
-        angle * 0.15,
+        angle * 0.12,
         math.cos(angle + style.phase) * style.tilt
     )
 end
 
 local function runAuraAnimation(auraKey, config, token)
-    local updateInterval = 0.08
+    local updateInterval = 0.10
 
     while auraRunning
         and currentAura == auraKey
@@ -634,10 +518,10 @@ local function stopAura()
     -- Do not coroutine.close() a running thread. Let the token/state
     -- condition end it safely.
     auraThread = nil
-    updateProfileAura()
 end
 
 local function startAura(auraKey)
+    stopSnake()
     local config = AllAuraConfigs[auraKey]
 
     if not config then
@@ -666,8 +550,6 @@ local function startAura(auraKey)
     auraThread = task.spawn(function()
         runAuraAnimation(auraKey, config, myToken)
     end)
-
-    updateProfileAura()
 
     print(
         config.color
@@ -706,6 +588,233 @@ local function resetProps()
     return true
 end
 
+
+-- =========================================================
+-- SNAKE ENGINE V3
+-- Up to 25 owned props become one smooth snake.
+-- 20 controls/features are exposed in the Snake tab.
+-- =========================================================
+
+local snakeRunning = false
+local snakeAutoTravel = false
+local snakeFollowPlayer = true
+local snakeReverse = false
+local snakeWave = true
+local snakePatrol = false
+local snakeSmoothTurns = true
+local snakeHeadLead = true
+local snakeBreathing = true
+local snakeTailWhip = true
+local snakeSpiralTravel = false
+local snakeRandomStops = true
+local snakeHover = false
+local snakeLength = 15
+local snakeSpeed = 8
+local snakeSpacing = 2.15
+local snakeWaveHeight = 0.65
+local snakeTurnSmooth = 0.12
+local snakeTarget = nil
+local snakeHeadPosition = nil
+local snakeNextTargetAt = 0
+local snakeHeading = nil
+local snakeTravelSeed = 0
+
+local function getSnakeProps()
+    if not propFolder or not propFolder.Parent or #propList == 0 then
+        findProps()
+    end
+    local out = {}
+    local count = math.clamp(tonumber(snakeLength) or 15, 1, math.min(25, #propList))
+    for i = 1, count do
+        if propList[i] and propList[i].Parent then
+            table.insert(out, propList[i])
+        end
+    end
+    return out
+end
+
+local function chooseSnakeTarget(origin)
+    snakeTravelSeed += 1
+    local seed = snakeTravelSeed * 17 + math.floor(os.clock() * 10)
+    local angle = math.rad((seed * 47) % 360)
+    local distance = 22 + ((seed * 13) % 34)
+    local y = snakeHover and (2 + ((seed * 7) % 5)) or 0
+    return origin + Vector3.new(math.cos(angle) * distance, y, math.sin(angle) * distance)
+end
+
+local function moveSnake()
+    local character = getCharacter()
+    if not character then
+        return
+    end
+
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        return
+    end
+
+    local snakeProps = getSnakeProps()
+    local count = #snakeProps
+    if count == 0 then
+        return
+    end
+
+    local now = os.clock()
+    local playerPos = hrp.Position
+    local forward = hrp.CFrame.LookVector
+    local desiredHead
+
+    if snakeAutoTravel then
+        if not snakeTarget
+            or now >= snakeNextTargetAt
+            or (snakeTarget - playerPos).Magnitude < 7 then
+            snakeTarget = chooseSnakeTarget(playerPos)
+            snakeNextTargetAt = now + (snakeRandomStops and 4.5 or 8.0)
+        end
+        desiredHead = snakeTarget
+    else
+        desiredHead = playerPos + forward * (snakeHeadLead and 2.5 or 0)
+        if snakeHover then
+            desiredHead += Vector3.new(0, 2.2, 0)
+        end
+    end
+
+    if not snakeHeadPosition then
+        snakeHeadPosition = desiredHead
+    end
+
+    local followAlpha = 1 - math.exp(-math.max(snakeSpeed, 1) * 0.075)
+    snakeHeadPosition = snakeHeadPosition:Lerp(desiredHead, math.clamp(followAlpha, 0.04, 0.95))
+
+    local headPos = snakeHeadPosition
+    local previousPos = headPos
+    local previousForward = snakeHeading or forward
+
+    if snakeSmoothTurns then
+        local wanted = desiredHead - playerPos
+        if wanted.Magnitude > 0.01 then
+            wanted = wanted.Unit
+            previousForward = previousForward:Lerp(wanted, math.clamp(snakeTurnSmooth, 0.02, 0.5)).Unit
+        end
+    else
+        previousForward = (desiredHead - playerPos).Magnitude > 0.01
+            and (desiredHead - playerPos).Unit
+            or forward
+    end
+    snakeHeading = previousForward
+
+    local path = {}
+    path[1] = headPos
+
+    for i = 2, count do
+        local back = (i - 1) * snakeSpacing
+        local pos = headPos - previousForward * back
+
+        if snakeFollowPlayer and not snakeAutoTravel then
+            -- Gentle player-follow bend, like a real snake turning behind the head.
+            local bend = math.sin(now * 1.35 - i * 0.42) * math.min(back * 0.035, 1.8)
+            pos += Vector3.new(
+                -previousForward.Z * bend,
+                0,
+                previousForward.X * bend
+            )
+        end
+
+        if snakeWave then
+            local wave = math.sin(now * 2.6 - i * 0.58) * snakeWaveHeight
+            pos += Vector3.new(-previousForward.Z * wave, 0, previousForward.X * wave)
+        end
+
+        if snakeSpiralTravel then
+            local spiral = (i / math.max(count, 1)) * math.pi * 1.5
+            pos += Vector3.new(
+                math.cos(spiral + now) * 0.45,
+                math.sin(spiral + now * 0.8) * 0.25,
+                math.sin(spiral + now) * 0.45
+            )
+        end
+
+        if snakeBreathing then
+            pos += Vector3.new(0, math.sin(now * 2.0 - i * 0.35) * 0.12, 0)
+        end
+
+        if snakeTailWhip and i > math.max(3, count - 5) then
+            local tailFactor = (i - (count - 5)) / 5
+            local whip = math.sin(now * 4.0 + i) * tailFactor * 1.2
+            pos += Vector3.new(-previousForward.Z * whip, 0, previousForward.X * whip)
+        end
+
+        path[i] = pos
+    end
+
+    if snakeReverse then
+        local reversed = {}
+        for i = 1, count do
+            reversed[i] = path[count - i + 1]
+        end
+        path = reversed
+    end
+
+    for i = 1, count do
+        local prop = snakeProps[i]
+        local pos = path[i]
+        local nextPos = path[math.min(i + 1, count)]
+        if i == count and i > 1 then
+            nextPos = path[i - 1]
+        end
+
+        if prop and prop.Parent then
+            local target
+            if (nextPos - pos).Magnitude > 0.01 then
+                target = CFrame.lookAt(pos, nextPos)
+            else
+                target = CFrame.new(pos)
+            end
+            moveProp(prop, target)
+        end
+    end
+end
+
+local function startSnake()
+    if snakeRunning then
+        return
+    end
+
+    if not findProps() then
+        warn("[MANI SNAKE] No owned props found")
+        return
+    end
+
+    snakeRunning = true
+    snakeTarget = nil
+    snakeHeadPosition = nil
+    snakeNextTargetAt = 0
+    snakeHeading = nil
+
+    task.spawn(function()
+        while snakeRunning do
+            pcall(moveSnake)
+            task.wait(0.075)
+        end
+    end)
+end
+
+stopSnake = function()
+    snakeRunning = false
+    snakeTarget = nil
+    snakeHeadPosition = nil
+    snakeHeading = nil
+end
+
+
+-- Mobile-first sizing hint. Roblox exposes display size categories for UI adaptation.
+pcall(function()
+    local GuiService = game:GetService("GuiService")
+    if GuiService.ViewportDisplaySize == Enum.DisplaySize.Small then
+        isFull = false
+    end
+end)
+
 -- GUI handling
 local UseFluent = false
 local Fluent = nil
@@ -725,24 +834,24 @@ local guiVisible = true
 local isFull = false
 
 if UseFluent and Fluent then
-    createProfileCard()
     local SaveManager, InterfaceManager
     pcall(function()
         SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
         InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
     end)
 
-    local compactSize = UDim2.fromOffset(340, 440)
-    local fullSize = UDim2.fromOffset(480, 560)
+    local compactSize = UDim2.fromOffset(292, 382)
+    local fullSize = UDim2.fromOffset(430, 500)
 
     local Window = Fluent:CreateWindow({
         Title = "MANI PROP GUI",
-        SubTitle = "v1",
+        SubTitle = "v3 • Mobile + Snake",
         TabWidth = 100,
         Size = compactSize,
         Acrylic = true,
         Theme = "Dark",
-        MinimizeKey = Enum.KeyCode.LeftControl
+        MinimizeKey = Enum.KeyCode.LeftControl,
+        Resize = false
     })
 
     -- Override minimize: toggle visibility instead of destroy
@@ -761,6 +870,7 @@ if UseFluent and Fluent then
         L = Window:AddTab({ Title = "🔴", Icon = "star" }),
         M = Window:AddTab({ Title = "🟡", Icon = "infinity" }),
         S = Window:AddTab({ Title = "💠", Icon = "eye" }),
+        Sn = Window:AddTab({ Title = "🐍", Icon = "move-3d" }),
         St = Window:AddTab({ Title = "⚙️", Icon = "settings" })
     }
 
@@ -772,7 +882,7 @@ if UseFluent and Fluent then
                 if config then
                     tab:AddButton({
                         Title = config.name,
-                        Description = config.type .. " • unique motion signature",
+                        Description = "",
                         Callback = function() startAura(key) end
                     })
                 end
@@ -812,24 +922,203 @@ if UseFluent and Fluent then
     end
     addControls(Tabs.C); addControls(Tabs.U); addControls(Tabs.R); addControls(Tabs.E); addControls(Tabs.L); addControls(Tabs.M); addControls(Tabs.S)
 
-    -- Settings tab with full-screen toggle
-    local propLabel = Tabs.St:AddParagraph({ Title = "📊 Props", Content = "Checking..." })
 
-    local profileLabel = Tabs.St:AddParagraph({
-        Title = "👤 Current User",
-        Content = "Loading profile..."
+    -- =====================================================
+    -- SNAKE TAB
+    -- 20 advanced snake features.
+    -- =====================================================
+    Tabs.Sn:AddParagraph({
+        Title = "🐍 MANI SNAKE",
+        Content = "Turn 1-25 owned props into a smooth living snake."
     })
 
-    pcall(function()
-        profileLabel:SetContent(
-            LocalPlayer.DisplayName
-            .. "\n@"
-            .. LocalPlayer.Name
-            .. "\nUserId: "
-            .. tostring(LocalPlayer.UserId)
-        )
-    end)
+    Tabs.Sn:AddToggle("SnakeEnabled", {
+        Title = "1. Snake Enabled",
+        Default = false,
+        Callback = function(v)
+            if v then startSnake() else stopSnake() end
+        end
+    })
 
+    Tabs.Sn:AddToggle("SnakeAutoTravel", {
+        Title = "2. Auto Travel",
+        Default = false,
+        Callback = function(v)
+            snakeAutoTravel = v
+            snakeTarget = nil
+        end
+    })
+
+    Tabs.Sn:AddToggle("SnakeFollow", {
+        Title = "3. Follow Player",
+        Default = true,
+        Callback = function(v) snakeFollowPlayer = v end
+    })
+
+    Tabs.Sn:AddSlider("SnakeLength", {
+        Title = "4. Snake Length",
+        Default = 15,
+        Min = 1,
+        Max = 25,
+        Rounding = 0,
+        Callback = function(v) snakeLength = math.clamp(math.floor(v + 0.5), 1, 25) end
+    })
+
+    Tabs.Sn:AddSlider("SnakeSpeed", {
+        Title = "5. Travel Speed",
+        Default = 8,
+        Min = 2,
+        Max = 20,
+        Rounding = 1,
+        Callback = function(v) snakeSpeed = v end
+    })
+
+    Tabs.Sn:AddSlider("SnakeSpacing", {
+        Title = "6. Body Spacing",
+        Default = 2.15,
+        Min = 1.0,
+        Max = 4.0,
+        Rounding = 2,
+        Callback = function(v) snakeSpacing = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeWave", {
+        Title = "7. Realistic Body Wave",
+        Default = true,
+        Callback = function(v) snakeWave = v end
+    })
+
+    Tabs.Sn:AddSlider("SnakeWaveHeight", {
+        Title = "8. Wave Strength",
+        Default = 0.65,
+        Min = 0,
+        Max = 2,
+        Rounding = 2,
+        Callback = function(v) snakeWaveHeight = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeSmoothTurns", {
+        Title = "9. Smooth Turning",
+        Default = true,
+        Callback = function(v) snakeSmoothTurns = v end
+    })
+
+    Tabs.Sn:AddSlider("SnakeTurnSmooth", {
+        Title = "10. Turn Smoothness",
+        Default = 0.12,
+        Min = 0.02,
+        Max = 0.5,
+        Rounding = 2,
+        Callback = function(v) snakeTurnSmooth = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeHeadLead", {
+        Title = "11. Head Lead",
+        Default = true,
+        Callback = function(v) snakeHeadLead = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeHover", {
+        Title = "12. Hover Mode",
+        Default = false,
+        Callback = function(v) snakeHover = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeBreathing", {
+        Title = "13. Body Breathing",
+        Default = true,
+        Callback = function(v) snakeBreathing = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeTailWhip", {
+        Title = "14. Tail Whip",
+        Default = true,
+        Callback = function(v) snakeTailWhip = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeSpiral", {
+        Title = "15. Spiral Travel",
+        Default = false,
+        Callback = function(v) snakeSpiralTravel = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakeRandomStops", {
+        Title = "16. Random Destinations",
+        Default = true,
+        Callback = function(v) snakeRandomStops = v; snakeTarget = nil end
+    })
+
+    Tabs.Sn:AddToggle("SnakeReverse", {
+        Title = "17. Reverse Body",
+        Default = false,
+        Callback = function(v) snakeReverse = v end
+    })
+
+    Tabs.Sn:AddToggle("SnakePatrol", {
+        Title = "18. Patrol Mode",
+        Default = false,
+        Callback = function(v)
+            snakePatrol = v
+            if v then snakeAutoTravel = true end
+        end
+    })
+
+    Tabs.Sn:AddButton({
+        Title = "19. New Random Destination",
+        Description = "Immediately sends the snake to a new nearby point.",
+        Callback = function()
+            local character = getCharacter()
+            local hrp = character and character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                snakeTarget = chooseSnakeTarget(hrp.Position)
+                snakeNextTargetAt = 0
+            end
+        end
+    })
+
+    Tabs.Sn:AddButton({
+        Title = "20. Stop Snake",
+        Description = "Stop the snake and release the props.",
+        Callback = function()
+            stopSnake()
+        end
+    })
+
+    Tabs.Sn:AddParagraph({
+        Title = "⚡ Performance",
+        Content = "Uses only your owned props. 25 props max. Smooth movement is rate-limited to reduce remote spam."
+    })
+
+    -- Settings / profile / size controls
+    local propLabel = Tabs.St:AddParagraph({
+        Title = "📊 Props",
+        Content = "Checking..."
+    })
+
+    local profileLabel = Tabs.St:AddParagraph({
+        Title = "👤 PROFILE CARD",
+        Content =
+            "Display: " .. LocalPlayer.DisplayName
+            .. "\nUsername: @" .. LocalPlayer.Name
+            .. "\nUserId: " .. tostring(LocalPlayer.UserId)
+            .. "\nStatus: MANI PROP Ready"
+            .. "\nAura: None"
+    })
+
+    local function updateProfileLabel()
+        pcall(function()
+            local auraName = currentAura and AllAuraConfigs[currentAura]
+            local auraText = auraName and auraName.name or "None"
+            local snakeText = snakeRunning and " • Snake ON" or ""
+            profileLabel:SetContent(
+                "Display: " .. LocalPlayer.DisplayName
+                .. "\nUsername: @" .. LocalPlayer.Name
+                .. "\nUserId: " .. tostring(LocalPlayer.UserId)
+                .. "\nStatus: " .. (snakeRunning and "Snake Active" or "MANI PROP Ready")
+                .. "\nAura: " .. auraText .. snakeText
+            )
+        end)
+    end
 
     task.spawn(function()
         while true do
@@ -839,20 +1128,83 @@ if UseFluent and Fluent then
                 else
                     propLabel:SetContent("No props")
                 end
+                updateProfileLabel()
             end)
-            task.wait(2)
+            task.wait(1)
         end
     end)
-    Tabs.St:AddButton({ Title = "🔄Refresh", Description = "", Callback = function()
-        findProps()
-        if Fluent then Fluent:Notify({Title="Refreshed", Content=#propList.." props", Duration=2}) end
-    end })
-    Tabs.St:AddButton({ Title = "📐Full Screen", Description = "Toggle size", Callback = function()
-        isFull = not isFull
-        Window:SetSize(isFull and fullSize or compactSize)
-        if Fluent then Fluent:Notify({Title=isFull and "Full" or "Compact", Content="Size changed", Duration=2}) end
-    end })
-    Tabs.St:AddParagraph({ Title = "📖 Info", Content = "139 auras • 12+ visual motion styles • Auto 1-25 props • Profile card enabled" })
+
+    Tabs.St:AddButton({
+        Title = "🔄 Refresh Props",
+        Description = "Re-scan your owned props.",
+        Callback = function()
+            findProps()
+            if Fluent then
+                Fluent:Notify({
+                    Title = "Refreshed",
+                    Content = #propList .. " props • using " .. totalProps,
+                    Duration = 2
+                })
+            end
+        end
+    })
+
+    local resizing = false
+    local function smoothWindowResize(target)
+        if resizing then return end
+        resizing = true
+
+        local from = isFull and compactSize or fullSize
+        local to = target
+        local steps = 14
+
+        for i = 1, steps do
+            local alpha = i / steps
+            -- SmoothStep easing.
+            alpha = alpha * alpha * (3 - 2 * alpha)
+
+            local w = math.floor(from.X.Offset + (to.X.Offset - from.X.Offset) * alpha)
+            local h = math.floor(from.Y.Offset + (to.Y.Offset - from.Y.Offset) * alpha)
+
+            pcall(function()
+                Window:SetSize(UDim2.fromOffset(w, h))
+            end)
+            task.wait(0.018)
+        end
+
+        -- Final authoritative size; prevents Fluent/mobile scaling from
+        -- immediately snapping back after the button is pressed.
+        for _ = 1, 3 do
+            pcall(function() Window:SetSize(to) end)
+            task.wait(0.05)
+        end
+
+        resizing = false
+    end
+
+    Tabs.St:AddButton({
+        Title = "📐 Big Screen / Compact",
+        Description = "Smoothly switch GUI size. It will stay at the selected size.",
+        Callback = function()
+            isFull = not isFull
+            task.spawn(function()
+                smoothWindowResize(isFull and fullSize or compactSize)
+            end)
+
+            if Fluent then
+                Fluent:Notify({
+                    Title = isFull and "Big Screen" or "Compact",
+                    Content = isFull and "Large GUI enabled" or "Mobile compact GUI enabled",
+                    Duration = 2
+                })
+            end
+        end
+    })
+
+    Tabs.St:AddParagraph({
+        Title = "📖 MANI PROP V3",
+        Content = "139 Auras • 14+ smooth visual families • Snake: 20 features • 1-25 props • Mobile optimized"
+    })
 
     task.spawn(function()
         repeat task.wait() until game:IsLoaded()
@@ -879,12 +1231,7 @@ if UseFluent and Fluent then
 
     LocalPlayer.CharacterAdded:Connect(function()
         local savedAura = currentAura
-
-        task.defer(function()
-            pcall(function()
-                createProfileCard()
-            end)
-        end)
+        stopSnake()
 
         if savedAura then
             stopAura()
@@ -900,7 +1247,6 @@ if UseFluent and Fluent then
     end)
 
 else
-    createProfileCard()
     -- Fallback GUI with minimize and full-screen toggle
     local player = game.Players.LocalPlayer
     local gui = Instance.new("ScreenGui")
@@ -909,8 +1255,8 @@ else
     gui.Parent = player.PlayerGui
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 300, 0, 400)
-    frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+    frame.Size = UDim2.new(0, 278, 0, 360)
+    frame.Position = UDim2.new(0.5, -139, 0.5, -180)
     frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
     frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
@@ -964,6 +1310,14 @@ else
     layout.FillDirection = Enum.FillDirection.Vertical
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = scroll
+
+    local commonList = {"SoftGlow","FreshBreeze","CalmRing","TinyOrbit","SimpleHalo","FloatingMist","GentleWave","LightBloom","MiniSpiral","CloudRing","SoftOrbit","BrightCircle","PeaceAura","BreezeHalo","MorningGlow","FloatingStars","LittleGalaxy","DreamRing","PureHalo","SkyBloom"}
+    local uncommonList = {"AquaOrbit","FrostRing","CrystalWave","WindSpiral","Rainfall","BlueComet","IceHalo","MistSpiral","OceanRing","CloudSpiral","SnowOrbit","SilverBloom","MoonRing","StarOrbit","SkySpiral","FrozenHalo","CrystalOrbit","TidalWave","WinterBloom","ArcticRing"}
+    local rareList = {"MysticSpiral","PhantomRing","ArcaneOrbit","SoulHalo","AstralBloom","RuneCircle","DreamSpiral","SpiritOrbit","Moonveil","Starveil","EtherRing","MirageOrbit","TwilightHalo","SpectralBloom","MysticCrown","AstralRing","PhantomOrbit","SoulSpiral","ArcaneBloom","Dreamveil"}
+    local epicList = {"SolarCrown","LunarCrown","ThunderRing","FlameOrbit","FrostCrown","StormSpiral","CometHalo","MeteorRing","GalaxyOrbit","NebulaBloom","GravityRing","EnergySpiral","VortexHalo","PlasmaOrbit","SolarSpiral","ThunderCrown","CosmicRing","Starstorm","SupernovaHalo","CelestialOrbit"}
+    local legendaryList = {"EclipseCrown","VoidSpiral","InfinityRing","EternalOrbit","DivineHalo","AncientCrown","ImmortalSpiral","RealityRing","DimensionOrbit","TimeflowHalo","CosmicCrown","UniverseSpiral","InfinityBloom","CelestialCrown","EternityRing","AstralDominion","DivineOrbit","RealityHalo","InfiniteSpiral","EternalBloom"}
+    local mythicList = {"ChaosCrown","AbyssOrbit","OblivionRing","VoidCrown","DarkstarSpiral","BlackholeHalo","EndworldOrbit","PhantomDominion","AbyssalCrown","InfiniteVoid","RealityBreaker","CosmicDestroyer","EternalVoid","DimensionBreak","ChaosSpiral","Voidstorm","BlackstarCrown","OblivionHalo","ZeroPoint","FinalEclipse"}
+    local secretList = {"NOVA15","Fifteenfold","Prophecy","TheCollector","LostFormation","ForbiddenOrbit","UnknownEntity","ZeroGravity","BeyondReality","TheLastAura","HiddenDimension","InfiniteMachinery","AbsoluteZero","Worldbreaker","EternalMachinery","UnknownSignal","The15thRealm","Singularity","Realityexe"}
 
     local function createCategory(title, auraKeys)
         local catLabel = Instance.new("TextLabel")
@@ -1023,37 +1377,60 @@ else
         resetProps()
     end)
 
+    local snakeBtn = Instance.new("TextButton")
+    snakeBtn.Size = UDim2.new(0,72,0,20)
+    snakeBtn.Position = UDim2.new(0.5,90,1,-28)
+    snakeBtn.BackgroundColor3 = Color3.fromRGB(70,140,70)
+    snakeBtn.Text = "Snake"
+    snakeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    snakeBtn.TextScaled = true
+    snakeBtn.Font = Enum.Font.Bold
+    snakeBtn.Parent = frame
+    snakeBtn.MouseButton1Click:Connect(function()
+        if snakeRunning then
+            stopSnake()
+            snakeBtn.Text = "Snake"
+        else
+            startSnake()
+            snakeBtn.Text = "Stop Snake"
+        end
+    end)
+
+
     -- Full-screen toggle button
     local sizeBtn = Instance.new("TextButton")
     sizeBtn.Size = UDim2.new(0,60,0,20)
     sizeBtn.Position = UDim2.new(0.5, -10, 1, -28)
     sizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
-    sizeBtn.Text = "Full"
+    sizeBtn.Text = "Big"
     sizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
     sizeBtn.TextScaled = true
     sizeBtn.Font = Enum.Font.Bold
     sizeBtn.Parent = frame
     sizeBtn.MouseButton1Click:Connect(function()
         isFull = not isFull
-        if isFull then
-            frame.Size = UDim2.new(0, 480, 0, 560)
-            frame.Position = UDim2.new(0.5, -240, 0.5, -280)
-            sizeBtn.Text = "Compact"
-        else
-            frame.Size = UDim2.new(0, 300, 0, 400)
-            frame.Position = UDim2.new(0.5, -150, 0.5, -200)
-            sizeBtn.Text = "Full"
+
+        local fromW, fromH = frame.AbsoluteSize.X, frame.AbsoluteSize.Y
+        local toW, toH = isFull and 430 or 278, isFull and 500 or 360
+
+        for i = 1, 14 do
+            local a = i / 14
+            a = a * a * (3 - 2 * a)
+            local w = math.floor(fromW + (toW - fromW) * a)
+            local h = math.floor(fromH + (toH - fromH) * a)
+            frame.Size = UDim2.fromOffset(w, h)
+            frame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+            task.wait(0.018)
         end
+
+        frame.Size = UDim2.fromOffset(toW, toH)
+        frame.Position = UDim2.new(0.5, -toW / 2, 0.5, -toH / 2)
+        sizeBtn.Text = isFull and "Compact" or "Big"
     end)
 
     LocalPlayer.CharacterAdded:Connect(function()
         local savedAura = currentAura
-
-        task.defer(function()
-            pcall(function()
-                createProfileCard()
-            end)
-        end)
+        stopSnake()
 
         if savedAura then
             stopAura()
@@ -1068,5 +1445,5 @@ else
         end
     end)
     findProps()
-    print("Fallback GUI loaded. Owned props: " .. #propList .. " (using " .. totalProps .. ")")
+    print("MANI PROP GUI V3 fallback loaded. Owned props: " .. #propList .. " (using " .. totalProps .. ")")
 end
