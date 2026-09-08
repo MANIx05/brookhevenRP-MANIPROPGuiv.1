@@ -1,5 +1,5 @@
 -- MANI PROP GUI V.1 by @MANISH_K05
--- Fixed: GUI shows all content, automatic canvas size, all auras work
+-- FIXED: aura system now uses exact prop handling from your working script
 
 local AllAuraConfigs = {
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
@@ -151,16 +151,18 @@ local centerPosition = nil
 local propFolder = nil
 local totalProps = 0
 
--- Prop detection
+-- EXACT prop detection from your working script
 local function findProps()
     propList = {}
     local player = game.Players.LocalPlayer
 
+    -- 1. Try exact path: WorkspaceCom > 001_TrafficCones
     local workspaceCom = workspace:FindFirstChild("WorkspaceCom")
     if workspaceCom then
         propFolder = workspaceCom:FindFirstChild("001_TrafficCones")
     end
 
+    -- 2. If not found, fallback to any folder with "prop"/"cone"/"traffic"
     if not propFolder then
         for _, child in ipairs(workspace:GetDescendants()) do
             if child:IsA("Folder") and (child.Name:lower():find("prop") or child.Name:lower():find("cone") or child.Name:lower():find("traffic")) then
@@ -175,6 +177,7 @@ local function findProps()
         return false
     end
 
+    -- 3. Collect props whose name contains the player's name
     local playerName = player.Name
     local foundAny = false
     for _, v in pairs(propFolder:GetChildren()) do
@@ -186,6 +189,7 @@ local function findProps()
         end
     end
 
+    -- 4. If none match, take all props
     if not foundAny then
         for _, v in pairs(propFolder:GetChildren()) do
             if v:IsA("BasePart") or v:IsA("Model") then
@@ -204,13 +208,15 @@ local function findProps()
     return true
 end
 
--- Aura animation
+-- Aura animation using EXACT prop handling from your script
 local function runAuraAnimation(config)
     if auraRunning then return end
     auraRunning = true
     local player = game.Players.LocalPlayer
     local char = player.Character or player.CharacterAdded:Wait()
     local useProps = totalProps
+
+    print("▶️ Aura started: " .. config.name .. " with " .. useProps .. " props")
 
     while auraRunning do
         if not char or not char.Parent then
@@ -228,10 +234,12 @@ local function runAuraAnimation(config)
 
             for i, prop in ipairs(usedProps) do
                 if prop and prop.Parent then
+                    -- Calculate position like your original script
                     local angle = (2 * math.pi / total) * i + tick() * config.speed
                     local radius = config.radius
                     local offsetY = config.offsetY
 
+                    -- Apply pattern modifications
                     if config.type == "wave" then
                         radius = config.radius + math.sin(angle * 3 + tick() * 2) * 2
                     elseif config.type == "spiral" then
@@ -259,11 +267,13 @@ local function runAuraAnimation(config)
                     local newPos = centerPosition + Vector3.new(x, y, z)
                     local lookAt = CFrame.new(newPos, centerPosition)
 
+                    -- EXACT call from your script: WaitForChild and InvokeServer
                     pcall(function()
-                        local setCF = prop:FindFirstChild("SetCurrentCFrame")
+                        local setCF = prop:WaitForChild("SetCurrentCFrame")
                         if setCF then
                             setCF:InvokeServer(lookAt)
                         else
+                            -- fallback (should not happen if remote exists)
                             prop.CFrame = lookAt
                         end
                     end)
@@ -281,6 +291,7 @@ local function stopAura()
         auraCoroutine = nil
     end
     currentAura = nil
+    print("⏹️ Aura stopped")
 end
 
 local function startAura(auraKey)
@@ -308,7 +319,7 @@ local function startAura(auraKey)
     print("🚀 " .. config.color .. " " .. config.name .. " activated with " .. totalProps .. " props")
 end
 
--- ===== GUI =====
+-- ===== GUI (compact + scrollable) =====
 local player = game.Players.LocalPlayer
 local gui = Instance.new("ScreenGui")
 gui.Name = "MANIPropGUI"
@@ -318,70 +329,70 @@ gui.Parent = player.PlayerGui
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 320, 0, 440)
 frame.Position = UDim2.new(0.5, -160, 0.5, -220)
-frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 frame.BackgroundTransparency = 0.1
 frame.BorderSizePixel = 0
 frame.Parent = gui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 30)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+title.Size = UDim2.new(1,0,0,28)
+title.Position = UDim2.new(0,0,0,0)
+title.BackgroundColor3 = Color3.fromRGB(50,50,50)
 title.Text = "MANI PROP GUI"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextColor3 = Color3.fromRGB(255,255,255)
 title.TextScaled = true
 title.Font = Enum.Font.Bold
 title.Parent = frame
 
+-- Status label
 local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, 0, 0, 18)
-status.Position = UDim2.new(0, 0, 0, 30)
+status.Size = UDim2.new(1,0,0,18)
+status.Position = UDim2.new(0,0,0,28)
 status.BackgroundTransparency = 1
 status.Text = "Checking props..."
-status.TextColor3 = Color3.fromRGB(200, 200, 200)
+status.TextColor3 = Color3.fromRGB(200,200,200)
 status.TextScaled = true
 status.Font = Enum.Font.Regular
 status.Parent = frame
 
+-- Minimize
 local minBtn = Instance.new("TextButton")
-minBtn.Size = UDim2.new(0, 28, 0, 22)
-minBtn.Position = UDim2.new(1, -60, 0, 4)
-minBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 150)
+minBtn.Size = UDim2.new(0,28,0,22)
+minBtn.Position = UDim2.new(1,-60,0,3)
+minBtn.BackgroundColor3 = Color3.fromRGB(50,50,150)
 minBtn.Text = "─"
-minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.TextColor3 = Color3.fromRGB(255,255,255)
 minBtn.TextScaled = true
 minBtn.Font = Enum.Font.Bold
 minBtn.Parent = frame
-minBtn.MouseButton1Click:Connect(function()
-    gui.Enabled = not gui.Enabled
-end)
+minBtn.MouseButton1Click:Connect(function() gui.Enabled = not gui.Enabled end)
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 28, 0, 22)
-closeBtn.Position = UDim2.new(1, -30, 0, 4)
-closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.Size = UDim2.new(0,28,0,22)
+closeBtn.Position = UDim2.new(1,-30,0,3)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
 closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
 closeBtn.TextScaled = true
 closeBtn.Font = Enum.Font.Bold
 closeBtn.Parent = frame
 closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -10, 1, -100)
-scroll.Position = UDim2.new(0, 5, 0, 52)
+scroll.Size = UDim2.new(1,-10,1,-110)
+scroll.Position = UDim2.new(0,5,0,50)
 scroll.BackgroundTransparency = 1
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scroll.ScrollBarThickness = 4
-scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y  -- Key fix: auto canvas height
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.Parent = frame
 
 local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 2)
+layout.Padding = UDim.new(0,2)
 layout.FillDirection = Enum.FillDirection.Vertical
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = scroll
 
+-- Category lists
 local commonList = {"SoftGlow","FreshBreeze","CalmRing","TinyOrbit","SimpleHalo","FloatingMist","GentleWave","LightBloom","MiniSpiral","CloudRing","SoftOrbit","BrightCircle","PeaceAura","BreezeHalo","MorningGlow","FloatingStars","LittleGalaxy","DreamRing","PureHalo","SkyBloom"}
 local uncommonList = {"AquaOrbit","FrostRing","CrystalWave","WindSpiral","Rainfall","BlueComet","IceHalo","MistSpiral","OceanRing","CloudSpiral","SnowOrbit","SilverBloom","MoonRing","StarOrbit","SkySpiral","FrozenHalo","CrystalOrbit","TidalWave","WinterBloom","ArcticRing"}
 local rareList = {"MysticSpiral","PhantomRing","ArcaneOrbit","SoulHalo","AstralBloom","RuneCircle","DreamSpiral","SpiritOrbit","Moonveil","Starveil","EtherRing","MirageOrbit","TwilightHalo","SpectralBloom","MysticCrown","AstralRing","PhantomOrbit","SoulSpiral","ArcaneBloom","Dreamveil"}
@@ -392,10 +403,10 @@ local secretList = {"NOVA15","Fifteenfold","Prophecy","TheCollector","LostFormat
 
 local function createCategory(title, auraKeys)
     local catLabel = Instance.new("TextLabel")
-    catLabel.Size = UDim2.new(1, 0, 0, 18)
-    catLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    catLabel.Size = UDim2.new(1,0,0,18)
+    catLabel.BackgroundColor3 = Color3.fromRGB(60,60,60)
     catLabel.Text = title
-    catLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    catLabel.TextColor3 = Color3.fromRGB(255,255,255)
     catLabel.TextScaled = true
     catLabel.Font = Enum.Font.Bold
     catLabel.Parent = scroll
@@ -404,10 +415,10 @@ local function createCategory(title, auraKeys)
         local config = AllAuraConfigs[key]
         if config then
             local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, 0, 0, 22)
-            btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+            btn.Size = UDim2.new(1,0,0,22)
+            btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
             btn.Text = config.name
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.TextColor3 = Color3.fromRGB(255,255,255)
             btn.TextScaled = true
             btn.Font = Enum.Font.Regular
             btn.Parent = scroll
@@ -426,30 +437,30 @@ createCategory("🔴 Legendary", legendaryList)
 createCategory("🟡 Mythic", mythicList)
 createCategory("💠 Secret", secretList)
 
--- bottom buttons frame
+-- Bottom buttons
 local bottomFrame = Instance.new("Frame")
-bottomFrame.Size = UDim2.new(1, 0, 0, 30)
-bottomFrame.Position = UDim2.new(0, 0, 1, -30)
+bottomFrame.Size = UDim2.new(1,0,0,30)
+bottomFrame.Position = UDim2.new(0,0,1,-30)
 bottomFrame.BackgroundTransparency = 1
 bottomFrame.Parent = frame
 
 local stopBtn = Instance.new("TextButton")
-stopBtn.Size = UDim2.new(0, 70, 0, 24)
-stopBtn.Position = UDim2.new(0.5, -110, 0, 3)
-stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+stopBtn.Size = UDim2.new(0,70,0,24)
+stopBtn.Position = UDim2.new(0.5,-110,0,3)
+stopBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
 stopBtn.Text = "Stop"
-stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+stopBtn.TextColor3 = Color3.fromRGB(255,255,255)
 stopBtn.TextScaled = true
 stopBtn.Font = Enum.Font.Bold
 stopBtn.Parent = bottomFrame
 stopBtn.MouseButton1Click:Connect(function() stopAura() end)
 
 local resetBtn = Instance.new("TextButton")
-resetBtn.Size = UDim2.new(0, 70, 0, 24)
-resetBtn.Position = UDim2.new(0.5, -35, 0, 3)
-resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
+resetBtn.Size = UDim2.new(0,70,0,24)
+resetBtn.Position = UDim2.new(0.5,-35,0,3)
+resetBtn.BackgroundColor3 = Color3.fromRGB(50,50,200)
 resetBtn.Text = "Reset"
-resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+resetBtn.TextColor3 = Color3.fromRGB(255,255,255)
 resetBtn.TextScaled = true
 resetBtn.Font = Enum.Font.Bold
 resetBtn.Parent = bottomFrame
@@ -461,23 +472,20 @@ resetBtn.MouseButton1Click:Connect(function()
         local hrp = char:WaitForChild("HumanoidRootPart")
         for _, prop in ipairs(propList) do
             pcall(function()
-                local setCF = prop:FindFirstChild("SetCurrentCFrame")
-                if setCF then
-                    setCF:InvokeServer(CFrame.new(hrp.Position))
-                else
-                    prop.CFrame = CFrame.new(hrp.Position)
-                end
+                local setCF = prop:WaitForChild("SetCurrentCFrame")
+                if setCF then setCF:InvokeServer(CFrame.new(hrp.Position)) end
             end)
         end
+        print("🔄 Props reset to center")
     end
 end)
 
 local sizeBtn = Instance.new("TextButton")
-sizeBtn.Size = UDim2.new(0, 60, 0, 24)
-sizeBtn.Position = UDim2.new(0.5, 40, 0, 3)
-sizeBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+sizeBtn.Size = UDim2.new(0,60,0,24)
+sizeBtn.Position = UDim2.new(0.5,40,0,3)
+sizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
 sizeBtn.Text = "Full"
-sizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+sizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
 sizeBtn.TextScaled = true
 sizeBtn.Font = Enum.Font.Bold
 sizeBtn.Parent = bottomFrame
@@ -485,12 +493,12 @@ local isFull = false
 sizeBtn.MouseButton1Click:Connect(function()
     isFull = not isFull
     if isFull then
-        frame.Size = UDim2.new(0, 480, 0, 560)
-        frame.Position = UDim2.new(0.5, -240, 0.5, -280)
+        frame.Size = UDim2.new(0,480,0,560)
+        frame.Position = UDim2.new(0.5,-240,0.5,-280)
         sizeBtn.Text = "Compact"
     else
-        frame.Size = UDim2.new(0, 320, 0, 440)
-        frame.Position = UDim2.new(0.5, -160, 0.5, -220)
+        frame.Size = UDim2.new(0,320,0,440)
+        frame.Position = UDim2.new(0.5,-160,0.5,-220)
         sizeBtn.Text = "Full"
     end
 end)
@@ -499,6 +507,7 @@ game.Players.LocalPlayer.CharacterAdded:Connect(function()
     stopAura()
 end)
 
+-- Initial prop detection and status update
 findProps()
 status.Text = "Props: " .. #propList .. " (using " .. totalProps .. ")"
 print("✅ MANI PROP GUI loaded. Props found: " .. #propList .. " (using " .. totalProps .. ")")
