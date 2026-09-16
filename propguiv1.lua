@@ -1,5 +1,6 @@
 -- MANI GUI V.1 by MANISH_K05
--- Fixed: minimize toggles, full-screen toggle, aura follows player, props work
+-- FULL FIX: slider callbacks (OnChanged), 15-prop rope/snake, aura height/spacing
+-- per tab, mobile responsive sizing.
 
 local AllAuraConfigs = {
     SoftGlow = { name = "Soft Glow", speed = 0.5, radius = 12, offsetY = 0, rotation = 0, type = "circle", color = "🟢" },
@@ -152,6 +153,10 @@ local auraThread = nil
 local auraToken = 0
 local stopSnake
 
+-- ============ NEW: global aura adjustments ============
+local auraHeightOffset = 0     -- up/down in studs
+local auraSpacingMultiplier = 1.0 -- radius multiplier
+
 local propList = {}
 local centerPosition = nil
 local propFolder = nil
@@ -159,38 +164,24 @@ local totalProps = 0
 
 -- =========================================================
 -- PROP ENGINE
--- Uses the same server RemoteFunction as the working
--- SetCurrentCFrame prop-handle script.
 -- =========================================================
 
 local function getPropFolder()
     local workspaceCom = workspace:FindFirstChild("WorkspaceCom")
-    if not workspaceCom then
-        return nil
-    end
-
+    if not workspaceCom then return nil end
     return workspaceCom:FindFirstChild("001_TrafficCones")
 end
 
 local function findSetCurrentCFrame(prop)
-    if not prop then
-        return nil
-    end
-
-    -- The known-working prop script uses this as a direct child.
+    if not prop then return nil end
     local remote = prop:FindFirstChild("SetCurrentCFrame")
-    if remote and remote:IsA("RemoteFunction") then
-        return remote
-    end
-
-    -- Extra robustness if the RemoteFunction is nested.
+    if remote and remote:IsA("RemoteFunction") then return remote end
     for _, descendant in ipairs(prop:GetDescendants()) do
         if descendant.Name == "SetCurrentCFrame"
             and descendant:IsA("RemoteFunction") then
             return descendant
         end
     end
-
     return nil
 end
 
@@ -199,15 +190,10 @@ local function findProps()
     propFolder = getPropFolder()
     totalProps = 0
 
-    if not propFolder then
-        return false
-    end
+    if not propFolder then return false end
 
     local playerName = LocalPlayer.Name
 
-    -- IMPORTANT:
-    -- Only use props whose name contains the local player's
-    -- username, matching the user's working prop script.
     for _, prop in ipairs(propFolder:GetChildren()) do
         if (prop:IsA("BasePart") or prop:IsA("Model"))
             and string.find(prop.Name, playerName, 1, true) then
@@ -215,14 +201,8 @@ local function findProps()
         end
     end
 
-    if #propList == 0 then
-        return false
-    end
-
-    -- Prefer 25 props when available.
-    -- If fewer exist, use every owned prop instead of failing.
+    if #propList == 0 then return false end
     totalProps = math.min(#propList, 25)
-
     return true
 end
 
@@ -245,8 +225,6 @@ local function moveProp(prop, targetCFrame)
     end)
 end
 
--- Sends the whole formation without waiting between props. This keeps the
--- aura synchronized instead of visibly moving one prop at a time.
 local function movePropsTogether(items)
     for _, item in ipairs(items) do
         task.spawn(function() moveProp(item[1], item[2]) end)
@@ -255,20 +233,12 @@ end
 
 local function getCharacter()
     local character = LocalPlayer.Character
-
-    if not character or not character.Parent then
-        return nil
-    end
-
+    if not character or not character.Parent then return nil end
     return character
 end
 
-
 -- =========================================================
--- AURA ENGINE V3
--- Smooth, deterministic and visually different formations.
--- Styles are cached once per aura to avoid rebuilding tables
--- every frame.
+-- AURA ENGINE V3 (with global height + spacing)
 -- =========================================================
 
 local auraStyleCache = {}
@@ -283,9 +253,7 @@ end
 
 local function getAuraStyle(auraKey, config)
     local cached = auraStyleCache[auraKey]
-    if cached then
-        return cached
-    end
+    if cached then return cached end
 
     local h = auraHash(tostring(auraKey) .. "|" .. tostring(config.name))
     cached = {
@@ -321,95 +289,67 @@ local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
     local y = baseY
 
     if style.style == 1 then
-        -- Smooth breathing halo
         local breath = 0.5 + 0.5 * math.sin(time * 1.65 + index * 0.22)
         radius = baseRadius * (0.90 + breath * 0.16)
         y = baseY + math.sin(time * 1.9 + index * 0.35) * 0.55
-
     elseif style.style == 2 then
-        -- Flower / petals
         local petal = math.sin(angle * style.petals + time * 0.55)
         radius = baseRadius * (0.72 + math.abs(petal) * 0.34)
         y = baseY + math.cos(angle * 2 + time) * 0.65
-
     elseif style.style == 3 then
-        -- Helix
         radius = baseRadius * (0.76 + 0.20 * math.sin(t * math.pi * 2 + time))
         y = baseY + math.sin(t * math.pi * 2 + time * 1.35) * style.height * 1.55
-
     elseif style.style == 4 then
-        -- Star
         local star = math.abs(math.cos(angle * 5 + time * 0.65))
         radius = baseRadius * (0.56 + 0.55 * star)
         y = baseY + math.sin(time * 1.7 + index * 0.52) * 0.85
-
     elseif style.style == 5 then
-        -- Infinity / double orbit
         local side = (index % 2 == 0) and 1 or -1
         radius = baseRadius * ((side == 1) and style.outer or style.inner)
         angle = angle + side * (math.pi / 8)
         y = baseY + side * 1.45 + math.sin(time * 1.2 + index) * 0.4
-
     elseif style.style == 6 then
-        -- Flowing wave
         radius = baseRadius + math.sin(angle * 3 + time * 1.9) * (1.1 + style.wave)
         y = baseY + math.sin(angle * 2 + time * 1.4) * style.height
-
     elseif style.style == 7 then
-        -- Vortex
         local depth = (t - 0.5) * 2
         radius = baseRadius * (0.54 + 0.76 * (1 - math.abs(depth) * 0.28))
         angle = angle + depth * 2.35 + time * 0.38
         y = baseY + depth * style.height * 2.2
-
     elseif style.style == 8 then
-        -- Crown
         local crown = math.sin(angle * 4 + time * 0.8)
         radius = baseRadius * (0.70 + 0.32 * math.max(crown, 0))
         y = baseY + 1.5 + math.max(crown, 0) * 2.7
-
     elseif style.style == 9 then
-        -- Comet
         local trail = t
         radius = baseRadius * (0.58 + trail * 0.50)
         angle = angle - trail * 1.45
         y = baseY + math.sin(time * 1.45 + trail * math.pi * 2) * 1.25
-
     elseif style.style == 10 then
-        -- Galaxy arms
         local arm = math.sin(t * math.pi * 4 + time)
         radius = baseRadius * (0.52 + 0.58 * math.abs(arm))
         angle = angle + arm * 1.05
         y = baseY + math.sin(t * math.pi * 4 + time * 0.75) * 2.15
-
     elseif style.style == 11 then
-        -- Diamond pulse
         local diamond = 1 - math.abs(math.sin(angle * 4 + time))
         radius = baseRadius * (0.62 + diamond * 0.58)
         y = baseY + math.cos(angle * 4 + time) * 1.0
-
     elseif style.style == 12 then
-        -- Three orbital lanes
         local lane = (index % 3) - 1
         radius = baseRadius * (1 + lane * 0.17)
         angle = angle + lane * 0.82
         y = baseY + lane * 1.65 + math.sin(time * 1.6 + index) * 0.5
-
     elseif style.style == 13 then
-        -- Ripple sphere
         local wave = math.sin(t * math.pi * 2 + time * 1.2)
         radius = baseRadius * (0.72 + math.abs(wave) * 0.42)
         y = baseY + math.cos(t * math.pi * 4 + time) * 2.0
-
     else
-        -- Slow orbital ribbon
         local ribbon = math.sin(t * math.pi * 2 + time)
         radius = baseRadius * (0.82 + ribbon * 0.20)
         angle = angle + math.sin(time * 0.55) * 0.65
         y = baseY + ribbon * 2.4
     end
 
-    -- Original aura type is still respected as a secondary motion layer.
     if config.type == "wave" then
         radius += math.sin(angle * 3 + time * 1.65) * 1.25
         y += math.sin(time * 2 + index * 0.6) * 0.55
@@ -425,9 +365,13 @@ local function getAuraCFrame(auraKey, config, index, total, elapsed, center)
         y += side * 0.72
     end
 
-    -- Universal micro-motion prevents dead/static frames.
     radius += math.sin(elapsed * speed * 2.0 + index * 0.31 + style.phase) * 0.28
     y += math.cos(elapsed * speed * 1.65 + index * 0.43) * 0.20
+
+    -- ======= GLOBAL USER ADJUSTMENTS =======
+    radius = radius * auraSpacingMultiplier
+    y = y + auraHeightOffset
+    -- =======================================
 
     local position = center + Vector3.new(
         math.cos(angle) * radius,
@@ -451,23 +395,18 @@ local function runAuraAnimation(auraKey, config, token)
         and auraToken == token do
 
         local character = getCharacter()
-
         if not character then
             task.wait(0.25)
             continue
         end
 
         local hrp = character:FindFirstChild("HumanoidRootPart")
-
         if not hrp then
             task.wait(0.1)
             continue
         end
 
-        -- Refresh props if they were recreated by the game.
-        if not propFolder
-            or not propFolder.Parent
-            or #propList == 0 then
+        if not propFolder or not propFolder.Parent or #propList == 0 then
             findProps()
         end
 
@@ -495,19 +434,13 @@ end
 local function stopAura()
     auraRunning = false
     currentAura = nil
-
-    -- Invalidates any previous animation loop.
     auraToken += 1
-
-    -- Do not coroutine.close() a running thread. Let the token/state
-    -- condition end it safely.
     auraThread = nil
 end
 
 local function startAura(auraKey)
     stopSnake()
     local config = AllAuraConfigs[auraKey]
-
     if not config then
         warn("[MANI AURA] Unknown aura:", auraKey)
         return
@@ -516,10 +449,9 @@ local function startAura(auraKey)
     stopAura()
 
     if not findProps() then
-        print("[MANI AURA] No owned props found in WorkspaceCom/001_TrafficCones")
+        print("[MANI AURA] No owned props found")
         return
     end
-
     if totalProps <= 0 then
         print("[MANI AURA] No usable props found")
         return
@@ -535,48 +467,27 @@ local function startAura(auraKey)
         runAuraAnimation(auraKey, config, myToken)
     end)
 
-    print(
-        config.color
-        .. " "
-        .. config.name
-        .. " activated with "
-        .. totalProps
-        .. " props"
-    )
+    print(config.color .. " " .. config.name .. " activated with " .. totalProps .. " props")
 end
 
 local function resetProps()
     stopAura()
-
-    if not findProps() then
-        return false
-    end
-
+    if not findProps() then return false end
     local character = getCharacter()
-    if not character then
-        return false
-    end
-
+    if not character then return false end
     local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        return false
-    end
+    if not hrp then return false end
 
     local resetCFrame = CFrame.new(hrp.Position)
-
     for _, prop in ipairs(propList) do
         moveProp(prop, resetCFrame)
         task.wait(0.03)
     end
-
     return true
 end
 
-
 -- =========================================================
 -- SNAKE ENGINE V3
--- Up to 25 owned props become one smooth snake.
--- 20 controls/features are exposed in the Snake tab.
 -- =========================================================
 
 local snakeRunning = false
@@ -604,76 +515,112 @@ local snakeHeading = nil
 local snakeTravelSeed = 0
 local snakeTrail = {}
 
+-- ===== FIXED: pre-filter valid props THEN slice =====
 local function getSnakeProps()
     if not propFolder or not propFolder.Parent or #propList == 0 then findProps() end
+    local valid = {}
+    for i = 1, #propList do
+        local p = propList[i]
+        if p and p.Parent then
+            valid[#valid + 1] = p
+        end
+    end
+    local wanted = math.clamp(math.floor(tonumber(snakeLength) or 15), 1, 25)
+    local count = math.min(wanted, #valid)
     local out = {}
-    local count = math.clamp(tonumber(snakeLength) or 15, 1, math.min(25, #propList))
-    for i=1,count do if propList[i] and propList[i].Parent then out[#out+1]=propList[i] end end
+    for i = 1, count do
+        out[i] = valid[i]
+    end
     return out
 end
 
 local function chooseSnakeTarget(origin)
     snakeTravelSeed += 1
-    local seed = snakeTravelSeed * 17 + math.floor(os.clock()*10)
-    local angle = math.rad((seed*47)%360)
-    local distance = 22 + ((seed*13)%34)
-    local y = snakeHover and (2+((seed*7)%5)) or 0
-    return origin + Vector3.new(math.cos(angle)*distance,y,math.sin(angle)*distance)
+    local seed = snakeTravelSeed * 17 + math.floor(os.clock() * 10)
+    local angle = math.rad((seed * 47) % 360)
+    local distance = 22 + ((seed * 13) % 34)
+    local y = snakeHover and (2 + ((seed * 7) % 5)) or 0
+    return origin + Vector3.new(math.cos(angle) * distance, y, math.sin(angle) * distance)
 end
 
 local function sampleTrail(secondsAgo, fallback)
     if #snakeTrail == 0 then return fallback end
     local wanted = os.clock() - secondsAgo
-    for i=1,#snakeTrail-1 do
-        local newer, older = snakeTrail[i], snakeTrail[i+1]
+    for i = 1, #snakeTrail - 1 do
+        local newer, older = snakeTrail[i], snakeTrail[i + 1]
         if newer.t >= wanted and older.t <= wanted then
-            local span = math.max(newer.t-older.t, 0.001)
-            local a = math.clamp((wanted-older.t)/span,0,1)
-            return older.p:Lerp(newer.p,a)
+            local span = math.max(newer.t - older.t, 0.001)
+            local a = math.clamp((wanted - older.t) / span, 0, 1)
+            return older.p:Lerp(newer.p, a)
         end
     end
     return snakeTrail[#snakeTrail].p
 end
 
 local function moveSnake()
-    local character=getCharacter()
-    local hrp=character and character:FindFirstChild("HumanoidRootPart")
+    local character = getCharacter()
+    local hrp = character and character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local props=getSnakeProps(); local count=#props
-    if count==0 then return end
-    local now=os.clock(); local playerPos=hrp.Position; local forward=hrp.CFrame.LookVector
+    local props = getSnakeProps()
+    local count = #props
+    if count == 0 then return end
+    local now = os.clock()
+    local playerPos = hrp.Position
+    local forward = hrp.CFrame.LookVector
     local desiredHead
+
     if snakeAutoTravel then
-        if not snakeTarget or now>=snakeNextTargetAt or (snakeTarget-playerPos).Magnitude<7 then
-            snakeTarget=chooseSnakeTarget(playerPos)
-            snakeNextTargetAt=now+(snakeRandomStops and 4.5 or 8)
+        if not snakeTarget or now >= snakeNextTargetAt or (snakeTarget - playerPos).Magnitude < 7 then
+            snakeTarget = chooseSnakeTarget(playerPos)
+            snakeNextTargetAt = now + (snakeRandomStops and 4.5 or 8)
         end
-        desiredHead=snakeTarget
+        desiredHead = snakeTarget
     else
-        desiredHead=playerPos+(snakeHeadLead and forward*2.5 or Vector3.zero)
-        if snakeHover then desiredHead += Vector3.new(0,2.2,0) end
+        desiredHead = playerPos + (snakeHeadLead and forward * 2.5 or Vector3.zero)
+        if snakeHover then desiredHead += Vector3.new(0, 2.2, 0) end
     end
-    snakeHeadPosition=snakeHeadPosition and snakeHeadPosition:Lerp(desiredHead,math.clamp(1-math.exp(-math.max(snakeSpeed,1)*0.10),0.08,0.9)) or desiredHead
-    local wantedDir=(desiredHead-playerPos)
-    if wantedDir.Magnitude<0.01 then wantedDir=forward end
-    wantedDir=wantedDir.Unit
-    snakeHeading=snakeHeading and snakeHeading:Lerp(wantedDir,math.clamp(snakeTurnSmooth,0.03,0.5)).Unit or wantedDir
-    local head=snakeHeadPosition
-    table.insert(snakeTrail,1,{t=now,p=head})
-    while #snakeTrail>160 do table.remove(snakeTrail) end
-    local batch={}
-    for i=1,count do
-        local segIndex=snakeReverse and (count-i) or (i-1)
-        local delay=(segIndex*snakeSpacing)/math.max(snakeSpeed,1)
-        local pos=sampleTrail(delay,head-snakeHeading*(segIndex*snakeSpacing))
-        local side=Vector3.new(-snakeHeading.Z,0,snakeHeading.X)
-        if snakeWave then pos += side*math.sin(now*snakeSpeed*0.32-segIndex*0.72)*(snakeWaveHeight*(1+segIndex/count*0.45)) end
-        if snakeSpiralTravel then local q=segIndex/count*math.pi*1.5; pos += Vector3.new(math.cos(q+now)*0.5,math.sin(q+now*0.8)*0.3,math.sin(q+now)*0.5) end
-        if snakeBreathing then pos += Vector3.new(0,math.sin(now*2-segIndex*0.35)*0.12,0) end
-        if snakeTailWhip and segIndex>math.max(2,count-6) then pos += side*math.sin(now*4+segIndex)*((segIndex-(count-6))/6)*1.0 end
-        local nextPos=sampleTrail(math.max(0,delay-0.04),pos+snakeHeading*0.3)
-        local cf=(nextPos-pos).Magnitude>0.01 and CFrame.lookAt(pos,nextPos) or CFrame.new(pos)
-        batch[#batch+1]={props[i],cf}
+
+    snakeHeadPosition = snakeHeadPosition and snakeHeadPosition:Lerp(
+        desiredHead,
+        math.clamp(1 - math.exp(-math.max(snakeSpeed, 1) * 0.10), 0.08, 0.9)
+    ) or desiredHead
+
+    local wantedDir = (desiredHead - playerPos)
+    if wantedDir.Magnitude < 0.01 then wantedDir = forward end
+    wantedDir = wantedDir.Unit
+    snakeHeading = snakeHeading and snakeHeading:Lerp(
+        wantedDir,
+        math.clamp(snakeTurnSmooth, 0.03, 0.5)
+    ).Unit or wantedDir
+
+    local head = snakeHeadPosition
+    table.insert(snakeTrail, 1, {t = now, p = head})
+    while #snakeTrail > 160 do table.remove(snakeTrail) end
+
+    local batch = {}
+    for i = 1, count do
+        local segIndex = snakeReverse and (count - i) or (i - 1)
+        local delay = (segIndex * snakeSpacing) / math.max(snakeSpeed, 1)
+        local pos = sampleTrail(delay, head - snakeHeading * (segIndex * snakeSpacing))
+        local side = Vector3.new(-snakeHeading.Z, 0, snakeHeading.X)
+        if snakeWave then
+            pos += side * math.sin(now * snakeSpeed * 0.32 - segIndex * 0.72)
+                * (snakeWaveHeight * (1 + segIndex / count * 0.45))
+        end
+        if snakeSpiralTravel then
+            local q = segIndex / count * math.pi * 1.5
+            pos += Vector3.new(math.cos(q + now) * 0.5, math.sin(q + now * 0.8) * 0.3, math.sin(q + now) * 0.5)
+        end
+        if snakeBreathing then
+            pos += Vector3.new(0, math.sin(now * 2 - segIndex * 0.35) * 0.12, 0)
+        end
+        if snakeTailWhip and segIndex > math.max(2, count - 6) then
+            pos += side * math.sin(now * 4 + segIndex)
+                * ((segIndex - (count - 6)) / 6) * 1.0
+        end
+        local nextPos = sampleTrail(math.max(0, delay - 0.04), pos + snakeHeading * 0.3)
+        local cf = (nextPos - pos).Magnitude > 0.01 and CFrame.lookAt(pos, nextPos) or CFrame.new(pos)
+        batch[#batch + 1] = {props[i], cf}
     end
     movePropsTogether(batch)
 end
@@ -681,49 +628,76 @@ end
 local function startSnake()
     if snakeRunning then return end
     if not findProps() then return end
-    snakeRunning=true; snakeTarget=nil; snakeHeadPosition=nil; snakeHeading=nil; snakeTrail={}
-    task.spawn(function() while snakeRunning do pcall(moveSnake); task.wait(0.055) end end)
+    snakeRunning = true
+    snakeTarget = nil
+    snakeHeadPosition = nil
+    snakeHeading = nil
+    snakeTrail = {}
+    task.spawn(function()
+        while snakeRunning do
+            pcall(moveSnake)
+            task.wait(0.055)
+        end
+    end)
 end
 
-stopSnake=function()
-    snakeRunning=false; snakeTarget=nil; snakeHeadPosition=nil; snakeHeading=nil; snakeTrail={}
+stopSnake = function()
+    snakeRunning = false
+    snakeTarget = nil
+    snakeHeadPosition = nil
+    snakeHeading = nil
+    snakeTrail = {}
 end
 
 -- =========================================================
 -- ROPE ENGINE
 -- =========================================================
-local ropeP1=""; local ropeP2=""; local ropeIncludeMe=false; local ropeRunning=false
-local ropeWave=0.6; local ropeSag=0.18; local ropeSegments=15; local ropeSpeed=3
+local ropeP1 = ""; local ropeP2 = ""; local ropeIncludeMe = false; local ropeRunning = false
+local ropeWave = 0.6; local ropeSag = 0.18; local ropeSegments = 15; local ropeSpeed = 3
 
 local function getPlayerByName(name)
-    name=string.lower(tostring(name or "")); if name=="" then return nil end
-    for _,plr in ipairs(Players:GetPlayers()) do
-        if string.find(string.lower(plr.Name),name,1,true) then return plr end
+    name = string.lower(tostring(name or ""))
+    if name == "" then return nil end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if string.find(string.lower(plr.Name), name, 1, true) then return plr end
     end
 end
-local function getHRP(plr) local c=plr and plr.Character; return c and c:FindFirstChild("HumanoidRootPart") end
-local function ropePoint(t,a,b)
-    local mid=(a+b)*0.5; local sag=math.clamp((a-b).Magnitude*ropeSag,2,14)
-    mid-=Vector3.new(0,sag,0)
-    return a:Lerp(mid,t):Lerp(mid:Lerp(b,t),t)
+
+local function getHRP(plr)
+    local c = plr and plr.Character
+    return c and c:FindFirstChild("HumanoidRootPart")
 end
-local function stopRope() ropeRunning=false end
+
+local function ropePoint(t, a, b)
+    local mid = (a + b) * 0.5
+    local sag = math.clamp((a - b).Magnitude * ropeSag, 2, 14)
+    mid -= Vector3.new(0, sag, 0)
+    return a:Lerp(mid, t):Lerp(mid:Lerp(b, t), t)
+end
+
+local function stopRope() ropeRunning = false end
+
 local function startRope()
     if ropeRunning then return end
     if not findProps() then return end
-    ropeRunning=true
+    ropeRunning = true
     task.spawn(function()
         while ropeRunning do
-            local p1=ropeIncludeMe and LocalPlayer or getPlayerByName(ropeP1)
-            local p2=getPlayerByName(ropeP2)
-            local h1,h2=getHRP(p1),getHRP(p2); local props=getSnakeProps()
-            if h1 and h2 and #props>0 then
-                local a,b=h1.Position,h2.Position; local dist=(a-b).Magnitude
-                local count=math.min(#props,math.clamp(math.floor(dist/2),4,math.max(4,ropeSegments)))
-                local batch={}; local now=os.clock()
-                for i=1,count do
-                    local t=i/(count+1); local pos=ropePoint(t,a,b)+Vector3.new(0,math.sin(t*math.pi*4+now*ropeSpeed)*ropeWave,0)
-                    batch[#batch+1]={props[i],CFrame.lookAt(pos,b)}
+            local p1 = ropeIncludeMe and LocalPlayer or getPlayerByName(ropeP1)
+            local p2 = getPlayerByName(ropeP2)
+            local h1, h2 = getHRP(p1), getHRP(p2)
+            local props = getSnakeProps()
+            if h1 and h2 and #props > 0 then
+                local a, b = h1.Position, h2.Position
+                local dist = (a - b).Magnitude
+                local count = math.min(#props, math.clamp(math.floor(dist / 2), 4, math.max(4, ropeSegments)))
+                local batch = {}
+                local now = os.clock()
+                for i = 1, count do
+                    local t = i / (count + 1)
+                    local pos = ropePoint(t, a, b)
+                        + Vector3.new(0, math.sin(t * math.pi * 4 + now * ropeSpeed) * ropeWave, 0)
+                    batch[#batch + 1] = {props[i], CFrame.lookAt(pos, b)}
                 end
                 movePropsTogether(batch)
             end
@@ -732,15 +706,10 @@ local function startRope()
     end)
 end
 
--- Mobile-first sizing hint. Roblox exposes display size categories for UI adaptation.
-pcall(function()
-    local GuiService = game:GetService("GuiService")
-    if GuiService.ViewportDisplaySize == Enum.DisplaySize.Small then
-        isFull = false
-    end
-end)
+-- =========================================================
+-- GUI
+-- =========================================================
 
--- GUI handling
 local UseFluent = false
 local Fluent = nil
 for attempt = 1, 3 do
@@ -758,6 +727,26 @@ end
 local guiVisible = true
 local isFull = false
 
+-- ============ MOBILE-RESPONSIVE SIZING ============
+local function getViewport()
+    local cam = workspace.CurrentCamera
+    return (cam and cam.ViewportSize) or Vector2.new(1280, 720)
+end
+
+local function computeCompactSize()
+    local vp = getViewport()
+    local w = math.clamp(math.floor(vp.X * 0.86), 250, 320)
+    local h = math.clamp(math.floor(vp.Y * 0.72), 300, 420)
+    return UDim2.fromOffset(w, h)
+end
+
+local function computeFullSize()
+    local vp = getViewport()
+    local w = math.clamp(math.floor(vp.X * 0.92), 300, 460)
+    local h = math.clamp(math.floor(vp.Y * 0.86), 360, 540)
+    return UDim2.fromOffset(w, h)
+end
+
 if UseFluent and Fluent then
     local SaveManager, InterfaceManager
     pcall(function()
@@ -765,15 +754,13 @@ if UseFluent and Fluent then
         InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
     end)
 
-    local compactSize = UDim2.fromOffset(292, 382)
-    local fullSize = UDim2.fromOffset(430, 500)
-    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
-    if viewport.X < 700 or viewport.Y < 520 then compactSize = UDim2.fromOffset(270, 350) end
+    local compactSize = computeCompactSize()
+    local fullSize = computeFullSize()
 
     local Window = Fluent:CreateWindow({
         Title = "MANI GUI V.1",
         SubTitle = "by MANISH_K05",
-        TabWidth = 100,
+        TabWidth = 90,
         Size = compactSize,
         Acrylic = true,
         Theme = "Dark",
@@ -781,14 +768,11 @@ if UseFluent and Fluent then
         Resize = false
     })
 
-    -- Override minimize: toggle visibility instead of destroy
-    local oldMinimize = Window.Minimize
     Window.Minimize = function()
         guiVisible = not guiVisible
         Window.Visible = guiVisible
     end
 
-    -- Add full-screen toggle button in settings
     local Tabs = {
         C = Window:AddTab({ Title = "🟢", Icon = "sparkles" }),
         U = Window:AddTab({ Title = "🔵", Icon = "gem" }),
@@ -834,163 +818,138 @@ if UseFluent and Fluent then
     buildAuraButtons(Tabs.M, mythicList, "🌟 Mythic")
     buildAuraButtons(Tabs.S, secretList, "💠 Secret")
 
+    -- ============ Controls per aura tab (with height + spacing) ============
+    local controlId = 0
     local function addControls(tab)
+        controlId += 1
+        local idSuffix = tostring(controlId)
+
+        tab:AddParagraph({ Title = "📐 Aura Adjustments", Content = "" })
+
+        tab:AddSlider("AuraHeight_" .. idSuffix, {
+            Title = "📏 Prop Height (Up/Down)",
+            Description = "Move every aura prop up or down (studs).",
+            Default = 0,
+            Min = -15,
+            Max = 15,
+            Rounding = 1,
+            OnChanged = function(v) auraHeightOffset = tonumber(v) or 0 end
+        })
+
+        tab:AddSlider("AuraSpacing_" .. idSuffix, {
+            Title = "↔️ Prop Spacing (Radius ×)",
+            Description = "Scale the whole aura formation.",
+            Default = 1.0,
+            Min = 0.3,
+            Max = 2.5,
+            Rounding = 2,
+            OnChanged = function(v) auraSpacingMultiplier = tonumber(v) or 1.0 end
+        })
+
         tab:AddParagraph({ Title = "🎮", Content = "" })
-        tab:AddButton({ Title = "⏹️Stop", Description = "", Callback = function()
-            stopAura()
-            if Fluent then Fluent:Notify({Title="Stopped", Content="Aura stopped", Duration=2}) end
-        end })
-        tab:AddButton({ Title = "🔄Reset", Description = "", Callback = function()
-            if resetProps() then
-                if Fluent then
-                    Fluent:Notify({Title="Reset", Content="Props reset", Duration=2})
+        tab:AddButton({
+            Title = "⏹️ Stop",
+            Description = "",
+            Callback = function()
+                stopAura()
+                if Fluent then Fluent:Notify({Title="Stopped", Content="Aura stopped", Duration=2}) end
+            end
+        })
+        tab:AddButton({
+            Title = "🔄 Reset",
+            Description = "",
+            Callback = function()
+                if resetProps() then
+                    if Fluent then
+                        Fluent:Notify({Title="Reset", Content="Props reset", Duration=2})
+                    end
                 end
             end
-        end })
+        })
     end
-    addControls(Tabs.C); addControls(Tabs.U); addControls(Tabs.R); addControls(Tabs.E); addControls(Tabs.L); addControls(Tabs.M); addControls(Tabs.S)
-
+    addControls(Tabs.C); addControls(Tabs.U); addControls(Tabs.R); addControls(Tabs.E)
+    addControls(Tabs.L); addControls(Tabs.M); addControls(Tabs.S)
 
     -- =====================================================
-    -- SNAKE TAB
-    -- 20 advanced snake features.
+    -- SNAKE TAB (all sliders now use OnChanged)
     -- =====================================================
     Tabs.Sn:AddParagraph({
         Title = "🐍 MANI SNAKE",
-        Content = "Turn 1-25 owned props into a smooth living snake."
+        Content = "Turn 1–25 owned props into a smooth living snake."
     })
 
     Tabs.Sn:AddToggle("SnakeEnabled", {
-        Title = "1. Snake Enabled",
-        Default = false,
-        Callback = function(v)
-            if v then startSnake() else stopSnake() end
-        end
+        Title = "1. Snake Enabled", Default = false,
+        Callback = function(v) if v then startSnake() else stopSnake() end end
     })
-
     Tabs.Sn:AddToggle("SnakeAutoTravel", {
-        Title = "2. Auto Travel",
-        Default = false,
-        Callback = function(v)
-            snakeAutoTravel = v
-            snakeTarget = nil
-        end
+        Title = "2. Auto Travel", Default = false,
+        Callback = function(v) snakeAutoTravel = v; snakeTarget = nil end
     })
-
     Tabs.Sn:AddToggle("SnakeFollow", {
-        Title = "3. Follow Player",
-        Default = true,
+        Title = "3. Follow Player", Default = true,
         Callback = function(v) snakeFollowPlayer = v end
     })
-
     Tabs.Sn:AddSlider("SnakeLength", {
-        Title = "4. Snake Length",
-        Default = 15,
-        Min = 1,
-        Max = 25,
-        Rounding = 0,
-        Callback = function(v) snakeLength = math.clamp(math.floor(v + 0.5), 1, 25) end
+        Title = "4. Snake Length", Default = 15, Min = 1, Max = 25, Rounding = 0,
+        OnChanged = function(v) snakeLength = math.clamp(math.floor(v + 0.5), 1, 25) end
     })
-
     Tabs.Sn:AddSlider("SnakeSpeed", {
-        Title = "5. Travel Speed",
-        Default = 8,
-        Min = 2,
-        Max = 20,
-        Rounding = 1,
-        Callback = function(v) snakeSpeed = v end
+        Title = "5. Travel Speed", Default = 8, Min = 2, Max = 20, Rounding = 1,
+        OnChanged = function(v) snakeSpeed = tonumber(v) or 8 end
     })
-
     Tabs.Sn:AddSlider("SnakeSpacing", {
-        Title = "6. Body Spacing",
-        Default = 2.15,
-        Min = 1.0,
-        Max = 4.0,
-        Rounding = 2,
-        Callback = function(v) snakeSpacing = v end
+        Title = "6. Body Spacing", Default = 2.15, Min = 1.0, Max = 4.0, Rounding = 2,
+        OnChanged = function(v) snakeSpacing = tonumber(v) or 2.15 end
     })
-
     Tabs.Sn:AddToggle("SnakeWave", {
-        Title = "7. Realistic Body Wave",
-        Default = true,
+        Title = "7. Realistic Body Wave", Default = true,
         Callback = function(v) snakeWave = v end
     })
-
     Tabs.Sn:AddSlider("SnakeWaveHeight", {
-        Title = "8. Wave Strength",
-        Default = 0.65,
-        Min = 0,
-        Max = 2,
-        Rounding = 2,
-        Callback = function(v) snakeWaveHeight = v end
+        Title = "8. Wave Strength", Default = 0.65, Min = 0, Max = 2, Rounding = 2,
+        OnChanged = function(v) snakeWaveHeight = tonumber(v) or 0.65 end
     })
-
     Tabs.Sn:AddToggle("SnakeSmoothTurns", {
-        Title = "9. Smooth Turning",
-        Default = true,
+        Title = "9. Smooth Turning", Default = true,
         Callback = function(v) snakeSmoothTurns = v end
     })
-
     Tabs.Sn:AddSlider("SnakeTurnSmooth", {
-        Title = "10. Turn Smoothness",
-        Default = 0.12,
-        Min = 0.02,
-        Max = 0.5,
-        Rounding = 2,
-        Callback = function(v) snakeTurnSmooth = v end
+        Title = "10. Turn Smoothness", Default = 0.12, Min = 0.02, Max = 0.5, Rounding = 2,
+        OnChanged = function(v) snakeTurnSmooth = tonumber(v) or 0.12 end
     })
-
     Tabs.Sn:AddToggle("SnakeHeadLead", {
-        Title = "11. Head Lead",
-        Default = true,
+        Title = "11. Head Lead", Default = true,
         Callback = function(v) snakeHeadLead = v end
     })
-
     Tabs.Sn:AddToggle("SnakeHover", {
-        Title = "12. Hover Mode",
-        Default = false,
+        Title = "12. Hover Mode", Default = false,
         Callback = function(v) snakeHover = v end
     })
-
     Tabs.Sn:AddToggle("SnakeBreathing", {
-        Title = "13. Body Breathing",
-        Default = true,
+        Title = "13. Body Breathing", Default = true,
         Callback = function(v) snakeBreathing = v end
     })
-
     Tabs.Sn:AddToggle("SnakeTailWhip", {
-        Title = "14. Tail Whip",
-        Default = true,
+        Title = "14. Tail Whip", Default = true,
         Callback = function(v) snakeTailWhip = v end
     })
-
     Tabs.Sn:AddToggle("SnakeSpiral", {
-        Title = "15. Spiral Travel",
-        Default = false,
+        Title = "15. Spiral Travel", Default = false,
         Callback = function(v) snakeSpiralTravel = v end
     })
-
     Tabs.Sn:AddToggle("SnakeRandomStops", {
-        Title = "16. Random Destinations",
-        Default = true,
+        Title = "16. Random Destinations", Default = true,
         Callback = function(v) snakeRandomStops = v; snakeTarget = nil end
     })
-
     Tabs.Sn:AddToggle("SnakeReverse", {
-        Title = "17. Reverse Body",
-        Default = false,
+        Title = "17. Reverse Body", Default = false,
         Callback = function(v) snakeReverse = v end
     })
-
     Tabs.Sn:AddToggle("SnakePatrol", {
-        Title = "18. Patrol Mode",
-        Default = false,
-        Callback = function(v)
-            snakePatrol = v
-            if v then snakeAutoTravel = true end
-        end
+        Title = "18. Patrol Mode", Default = false,
+        Callback = function(v) snakePatrol = v; if v then snakeAutoTravel = true end end
     })
-
     Tabs.Sn:AddButton({
         Title = "19. New Random Destination",
         Description = "Immediately sends the snake to a new nearby point.",
@@ -1003,36 +962,41 @@ if UseFluent and Fluent then
             end
         end
     })
-
     Tabs.Sn:AddButton({
         Title = "20. Stop Snake",
         Description = "Stop the snake and release the props.",
-        Callback = function()
-            stopSnake()
-        end
+        Callback = function() stopSnake() end
     })
-
     Tabs.Sn:AddParagraph({
         Title = "⚡ Performance",
-        Content = "Uses only your owned props. 25 props max. Smooth movement is rate-limited to reduce remote spam."
+        Content = "Uses only your owned props. 25 props max."
     })
 
+    -- =====================================================
+    -- ROPE TAB
+    -- =====================================================
     Tabs.Rp:AddParagraph({Title="🪢 Rope",Content=""})
-    Tabs.Rp:AddInput("RopePlayer1", {Title="Player 1", Default="", Placeholder="Username", Callback=function(v) ropeP1=tostring(v) end})
-    Tabs.Rp:AddInput("RopePlayer2", {Title="Player 2", Default="", Placeholder="Username", Callback=function(v) ropeP2=tostring(v) end})
-    Tabs.Rp:AddToggle("RopeIncludeMe", {Title="Include Me", Default=false, Callback=function(v) ropeIncludeMe=v end})
+    Tabs.Rp:AddInput("RopePlayer1", {Title="Player 1", Default="", Placeholder="Username",
+        Callback=function(v) ropeP1=tostring(v) end})
+    Tabs.Rp:AddInput("RopePlayer2", {Title="Player 2", Default="", Placeholder="Username",
+        Callback=function(v) ropeP2=tostring(v) end})
+    Tabs.Rp:AddToggle("RopeIncludeMe", {Title="Include Me", Default=false,
+        Callback=function(v) ropeIncludeMe=v end})
     Tabs.Rp:AddButton({Title="Start Rope",Description="",Callback=startRope})
     Tabs.Rp:AddButton({Title="Stop Rope",Description="",Callback=stopRope})
-    Tabs.Rp:AddSlider("RopeWave", {Title="Wave",Default=0.6,Min=0,Max=2,Rounding=2,Callback=function(v) ropeWave=v end})
-    Tabs.Rp:AddSlider("RopeSag", {Title="Sag",Default=0.18,Min=0.05,Max=0.5,Rounding=2,Callback=function(v) ropeSag=v end})
-    Tabs.Rp:AddSlider("RopeSegments", {Title="Max Segments",Default=15,Min=4,Max=25,Rounding=0,Callback=function(v) ropeSegments=math.floor(v+0.5) end})
-    Tabs.Rp:AddSlider("RopeSpeed", {Title="Wave Speed",Default=3,Min=0.5,Max=8,Rounding=1,Callback=function(v) ropeSpeed=v end})
+    Tabs.Rp:AddSlider("RopeWave", {Title="Wave",Default=0.6,Min=0,Max=2,Rounding=2,
+        OnChanged=function(v) ropeWave=tonumber(v) or 0.6 end})
+    Tabs.Rp:AddSlider("RopeSag", {Title="Sag",Default=0.18,Min=0.05,Max=0.5,Rounding=2,
+        OnChanged=function(v) ropeSag=tonumber(v) or 0.18 end})
+    Tabs.Rp:AddSlider("RopeSegments", {Title="Max Segments",Default=15,Min=4,Max=25,Rounding=0,
+        OnChanged=function(v) ropeSegments=math.floor(v+0.5) end})
+    Tabs.Rp:AddSlider("RopeSpeed", {Title="Wave Speed",Default=3,Min=0.5,Max=8,Rounding=1,
+        OnChanged=function(v) ropeSpeed=tonumber(v) or 3 end})
 
-    -- Settings / profile / size controls
-    local propLabel = Tabs.St:AddParagraph({
-        Title = "Props",
-        Content = "Checking..."
-    })
+    -- =====================================================
+    -- SETTINGS
+    -- =====================================================
+    local propLabel = Tabs.St:AddParagraph({ Title = "Props", Content = "Checking..." })
 
     local profileLabel = Tabs.St:AddParagraph({
         Title = "👤 PROFILE CARD",
@@ -1092,45 +1056,33 @@ if UseFluent and Fluent then
     local function smoothWindowResize(target)
         if resizing then return end
         resizing = true
-
         local current = Window.Size
         local from = UDim2.fromOffset(current.X.Offset, current.Y.Offset)
         local to = target
         local steps = 14
-
         for i = 1, steps do
             local alpha = i / steps
-            -- SmoothStep easing.
             alpha = alpha * alpha * (3 - 2 * alpha)
-
             local w = math.floor(from.X.Offset + (to.X.Offset - from.X.Offset) * alpha)
             local h = math.floor(from.Y.Offset + (to.Y.Offset - from.Y.Offset) * alpha)
-
-            pcall(function()
-                Window:SetSize(UDim2.fromOffset(w, h))
-            end)
+            pcall(function() Window:SetSize(UDim2.fromOffset(w, h)) end)
             task.wait(0.018)
         end
-
-        -- Final authoritative size; prevents Fluent/mobile scaling from
-        -- immediately snapping back after the button is pressed.
         for _ = 1, 3 do
             pcall(function() Window:SetSize(to) end)
             task.wait(0.05)
         end
-
         resizing = false
     end
 
     Tabs.St:AddButton({
         Title = "📐 Big Screen / Compact",
-        Description = "Smoothly switch GUI size. It will stay at the selected size.",
+        Description = "Smoothly switch GUI size (auto-fits mobile).",
         Callback = function()
             isFull = not isFull
-            task.spawn(function()
-                smoothWindowResize(isFull and fullSize or compactSize)
-            end)
-
+            -- recompute based on current viewport each time
+            local target = isFull and computeFullSize() or computeCompactSize()
+            task.spawn(function() smoothWindowResize(target) end)
             if Fluent then
                 Fluent:Notify({
                     Title = isFull and "Big Screen" or "Compact",
@@ -1141,10 +1093,7 @@ if UseFluent and Fluent then
         end
     })
 
-    Tabs.St:AddParagraph({
-        Title = "MANI GUI V.1",
-        Content = "by MANISH_K05"
-    })
+    Tabs.St:AddParagraph({ Title = "MANI GUI V.1", Content = "by MANISH_K05" })
 
     task.spawn(function()
         repeat task.wait() until game:IsLoaded()
@@ -1152,7 +1101,9 @@ if UseFluent and Fluent then
             findProps()
             Window:SelectTab(1)
         end)
-        if Fluent then Fluent:Notify({ Title = "MANI GUI V.1", Content = "Ready", Duration = 3 }) end
+        if Fluent then
+            Fluent:Notify({ Title = "MANI GUI V.1", Content = "Ready", Duration = 3 })
+        end
     end)
 
     pcall(function()
@@ -1169,29 +1120,15 @@ if UseFluent and Fluent then
         end
     end)
 
-    local ropeBtn = Instance.new("TextButton")
-    ropeBtn.Size = UDim2.new(0,72,0,20)
-    ropeBtn.Position = UDim2.new(0.5,168,1,-28)
-    ropeBtn.BackgroundColor3 = Color3.fromRGB(110,90,70)
-    ropeBtn.Text = "Rope"
-    ropeBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    ropeBtn.TextScaled = true
-    ropeBtn.Font = Enum.Font.Bold
-    ropeBtn.Parent = frame
-    ropeBtn.MouseButton1Click:Connect(function()
-        if ropeRunning then stopRope(); ropeBtn.Text="Rope" else startRope(); ropeBtn.Text="Stop Rope" end
-    end)
+    -- NOTE: removed broken floating ropeBtn (was parented to undefined `frame`).
 
     LocalPlayer.CharacterAdded:Connect(function()
         local savedAura = currentAura
         stopSnake()
         stopRope()
-
         if savedAura then
             stopAura()
-
             task.wait(1)
-
             if LocalPlayer.Character then
                 startAura(savedAura)
             end
@@ -1201,67 +1138,67 @@ if UseFluent and Fluent then
     end)
 
 else
-    -- Fallback GUI with minimize and full-screen toggle
+    -- ============ FALLBACK GUI (also responsive) ============
     local player = game.Players.LocalPlayer
     local gui = Instance.new("ScreenGui")
     gui.Name = "MANIPropGUI"
     gui.ResetOnSpawn = false
     gui.Parent = player.PlayerGui
 
+    local vp = getViewport()
+    local startW = math.clamp(math.floor(vp.X * 0.86), 250, 320)
+    local startH = math.clamp(math.floor(vp.Y * 0.72), 300, 420)
+
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 278, 0, 360)
-    frame.Position = UDim2.new(0.5, -139, 0.5, -180)
-    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    frame.Size = UDim2.fromOffset(startW, startH)
+    frame.Position = UDim2.new(0.5, -startW / 2, 0.5, -startH / 2)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
     frame.Parent = gui
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1,0,0,28)
-    title.Position = UDim2.new(0,0,0,0)
-    title.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    title.Size = UDim2.new(1, 0, 0, 28)
+    title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     title.Text = "MANI GUI V.1"
-    title.TextColor3 = Color3.fromRGB(255,255,255)
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.TextScaled = true
-    title.Font = Enum.Font.Bold
+    title.Font = Enum.Font.GothamBold
     title.Parent = frame
 
-    -- Minimize button (toggle visibility)
     local minBtn = Instance.new("TextButton")
-    minBtn.Size = UDim2.new(0,28,0,22)
-    minBtn.Position = UDim2.new(1,-60,0,3)
-    minBtn.BackgroundColor3 = Color3.fromRGB(50,50,150)
+    minBtn.Size = UDim2.new(0, 28, 0, 22)
+    minBtn.Position = UDim2.new(1, -60, 0, 3)
+    minBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 150)
     minBtn.Text = "─"
-    minBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     minBtn.TextScaled = true
-    minBtn.Font = Enum.Font.Bold
+    minBtn.Font = Enum.Font.GothamBold
     minBtn.Parent = frame
-    minBtn.MouseButton1Click:Connect(function()
-        gui.Enabled = not gui.Enabled
-    end)
+    minBtn.MouseButton1Click:Connect(function() gui.Enabled = not gui.Enabled end)
 
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0,28,0,22)
-    closeBtn.Position = UDim2.new(1,-30,0,3)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
+    closeBtn.Size = UDim2.new(0, 28, 0, 22)
+    closeBtn.Position = UDim2.new(1, -30, 0, 3)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     closeBtn.Text = "X"
-    closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     closeBtn.TextScaled = true
-    closeBtn.Font = Enum.Font.Bold
+    closeBtn.Font = Enum.Font.GothamBold
     closeBtn.Parent = frame
     closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
 
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1,-10,1,-65)
-    scroll.Position = UDim2.new(0,5,0,32)
+    scroll.Size = UDim2.new(1, -10, 1, -65)
+    scroll.Position = UDim2.new(0, 5, 0, 32)
     scroll.BackgroundTransparency = 1
-    scroll.CanvasSize = UDim2.new(0,0,0,0)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     scroll.ScrollBarThickness = 3
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     scroll.Parent = frame
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0,2)
-    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.Padding = UDim.new(0, 2)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = scroll
 
@@ -1275,24 +1212,24 @@ else
 
     local function createCategory(title, auraKeys)
         local catLabel = Instance.new("TextLabel")
-        catLabel.Size = UDim2.new(1,0,0,16)
-        catLabel.BackgroundColor3 = Color3.fromRGB(60,60,60)
+        catLabel.Size = UDim2.new(1, 0, 0, 16)
+        catLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
         catLabel.Text = title
-        catLabel.TextColor3 = Color3.fromRGB(255,255,255)
+        catLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         catLabel.TextScaled = true
-        catLabel.Font = Enum.Font.Bold
+        catLabel.Font = Enum.Font.GothamBold
         catLabel.Parent = scroll
 
         for _, key in ipairs(auraKeys) do
             local config = AllAuraConfigs[key]
             if config then
                 local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1,0,0,20)
-                btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
+                btn.Size = UDim2.new(1, 0, 0, 20)
+                btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
                 btn.Text = config.name
-                btn.TextColor3 = Color3.fromRGB(255,255,255)
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
                 btn.TextScaled = true
-                btn.Font = Enum.Font.Regular
+                btn.Font = Enum.Font.Gotham
                 btn.Parent = scroll
                 btn.MouseButton1Click:Connect(function() startAura(key) end)
             end
@@ -1307,38 +1244,78 @@ else
     createCategory("🟡 Mythic", mythicList)
     createCategory("💠 Secret", secretList)
 
+    -- Fallback: preset height + spacing buttons
+    local heightUp = Instance.new("TextButton")
+    heightUp.Size = UDim2.new(1, 0, 0, 20)
+    heightUp.BackgroundColor3 = Color3.fromRGB(70, 110, 70)
+    heightUp.Text = "⬆️ Prop Height +1"
+    heightUp.TextColor3 = Color3.fromRGB(255, 255, 255)
+    heightUp.TextScaled = true
+    heightUp.Font = Enum.Font.GothamBold
+    heightUp.Parent = scroll
+    heightUp.MouseButton1Click:Connect(function() auraHeightOffset += 1 end)
+
+    local heightDown = Instance.new("TextButton")
+    heightDown.Size = UDim2.new(1, 0, 0, 20)
+    heightDown.BackgroundColor3 = Color3.fromRGB(110, 70, 70)
+    heightDown.Text = "⬇️ Prop Height -1"
+    heightDown.TextColor3 = Color3.fromRGB(255, 255, 255)
+    heightDown.TextScaled = true
+    heightDown.Font = Enum.Font.GothamBold
+    heightDown.Parent = scroll
+    heightDown.MouseButton1Click:Connect(function() auraHeightOffset -= 1 end)
+
+    local spacingUp = Instance.new("TextButton")
+    spacingUp.Size = UDim2.new(1, 0, 0, 20)
+    spacingUp.BackgroundColor3 = Color3.fromRGB(70, 90, 120)
+    spacingUp.Text = "➕ Prop Spacing +0.1"
+    spacingUp.TextColor3 = Color3.fromRGB(255, 255, 255)
+    spacingUp.TextScaled = true
+    spacingUp.Font = Enum.Font.GothamBold
+    spacingUp.Parent = scroll
+    spacingUp.MouseButton1Click:Connect(function() auraSpacingMultiplier = math.min(2.5, auraSpacingMultiplier + 0.1) end)
+
+    local spacingDown = Instance.new("TextButton")
+    spacingDown.Size = UDim2.new(1, 0, 0, 20)
+    spacingDown.BackgroundColor3 = Color3.fromRGB(90, 70, 120)
+    spacingDown.Text = "➖ Prop Spacing -0.1"
+    spacingDown.TextColor3 = Color3.fromRGB(255, 255, 255)
+    spacingDown.TextScaled = true
+    spacingDown.Font = Enum.Font.GothamBold
+    spacingDown.Parent = scroll
+    spacingDown.MouseButton1Click:Connect(function() auraSpacingMultiplier = math.max(0.3, auraSpacingMultiplier - 0.1) end)
+
+    -- Bottom bar
     local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(0,60,0,20)
-    stopBtn.Position = UDim2.new(0.5,-70,1,-28)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
+    stopBtn.Size = UDim2.new(0, 60, 0, 20)
+    stopBtn.Position = UDim2.new(0.5, -70, 1, -28)
+    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     stopBtn.Text = "Stop"
-    stopBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     stopBtn.TextScaled = true
-    stopBtn.Font = Enum.Font.Bold
+    stopBtn.Font = Enum.Font.GothamBold
     stopBtn.Parent = frame
     stopBtn.MouseButton1Click:Connect(function() stopAura() end)
 
     local resetBtn = Instance.new("TextButton")
-    resetBtn.Size = UDim2.new(0,60,0,20)
-    resetBtn.Position = UDim2.new(0.5,10,1,-28)
-    resetBtn.BackgroundColor3 = Color3.fromRGB(50,50,200)
+    resetBtn.Size = UDim2.new(0, 60, 0, 20)
+    resetBtn.Position = UDim2.new(0.5, 10, 1, -28)
+    resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 200)
     resetBtn.Text = "Reset"
-    resetBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     resetBtn.TextScaled = true
-    resetBtn.Font = Enum.Font.Bold
+    resetBtn.Font = Enum.Font.GothamBold
     resetBtn.Parent = frame
-    resetBtn.MouseButton1Click:Connect(function()
-        resetProps()
-    end)
+    resetBtn.MouseButton1Click:Connect(function() resetProps() end)
 
     local snakeBtn = Instance.new("TextButton")
-    snakeBtn.Size = UDim2.new(0,72,0,20)
-    snakeBtn.Position = UDim2.new(0.5,90,1,-28)
-    snakeBtn.BackgroundColor3 = Color3.fromRGB(70,140,70)
+    snakeBtn.Size = UDim2.new(0, 72, 0, 20)
+    snakeBtn.Position = UDim2.new(0.5, 90, 1, -28)
+    snakeBtn.BackgroundColor3 = Color3.fromRGB(70, 140, 70)
     snakeBtn.Text = "Snake"
-    snakeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    snakeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     snakeBtn.TextScaled = true
-    snakeBtn.Font = Enum.Font.Bold
+    snakeBtn.Font = Enum.Font.GothamBold
     snakeBtn.Parent = frame
     snakeBtn.MouseButton1Click:Connect(function()
         if snakeRunning then
@@ -1350,23 +1327,24 @@ else
         end
     end)
 
-
-    -- Full-screen toggle button
     local sizeBtn = Instance.new("TextButton")
-    sizeBtn.Size = UDim2.new(0,60,0,20)
+    sizeBtn.Size = UDim2.new(0, 60, 0, 20)
     sizeBtn.Position = UDim2.new(0.5, -10, 1, -28)
-    sizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    sizeBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
     sizeBtn.Text = "Big"
-    sizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    sizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     sizeBtn.TextScaled = true
-    sizeBtn.Font = Enum.Font.Bold
+    sizeBtn.Font = Enum.Font.GothamBold
     sizeBtn.Parent = frame
     sizeBtn.MouseButton1Click:Connect(function()
         isFull = not isFull
+        local vp2 = getViewport()
+        local toW = isFull and math.clamp(math.floor(vp2.X * 0.92), 300, 460)
+                          or math.clamp(math.floor(vp2.X * 0.86), 250, 320)
+        local toH = isFull and math.clamp(math.floor(vp2.Y * 0.86), 360, 540)
+                          or math.clamp(math.floor(vp2.Y * 0.72), 300, 420)
 
         local fromW, fromH = frame.AbsoluteSize.X, frame.AbsoluteSize.Y
-        local toW, toH = isFull and 430 or 278, isFull and 500 or 360
-
         for i = 1, 14 do
             local a = i / 14
             a = a * a * (3 - 2 * a)
@@ -1376,42 +1354,38 @@ else
             frame.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
             task.wait(0.018)
         end
-
         frame.Size = UDim2.fromOffset(toW, toH)
         frame.Position = UDim2.new(0.5, -toW / 2, 0.5, -toH / 2)
         sizeBtn.Text = isFull and "Compact" or "Big"
     end)
 
     local ropeBtn = Instance.new("TextButton")
-    ropeBtn.Size = UDim2.new(0,72,0,20)
-    ropeBtn.Position = UDim2.new(0.5,168,1,-28)
-    ropeBtn.BackgroundColor3 = Color3.fromRGB(110,90,70)
+    ropeBtn.Size = UDim2.new(0, 72, 0, 20)
+    ropeBtn.Position = UDim2.new(0.5, 168, 1, -28)
+    ropeBtn.BackgroundColor3 = Color3.fromRGB(110, 90, 70)
     ropeBtn.Text = "Rope"
-    ropeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    ropeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     ropeBtn.TextScaled = true
-    ropeBtn.Font = Enum.Font.Bold
+    ropeBtn.Font = Enum.Font.GothamBold
     ropeBtn.Parent = frame
     ropeBtn.MouseButton1Click:Connect(function()
-        if ropeRunning then stopRope(); ropeBtn.Text="Rope" else startRope(); ropeBtn.Text="Stop Rope" end
+        if ropeRunning then stopRope(); ropeBtn.Text = "Rope"
+        else startRope(); ropeBtn.Text = "Stop Rope" end
     end)
 
     LocalPlayer.CharacterAdded:Connect(function()
         local savedAura = currentAura
         stopSnake()
         stopRope()
-
         if savedAura then
             stopAura()
-
             task.wait(1)
-
-            if LocalPlayer.Character then
-                startAura(savedAura)
-            end
+            if LocalPlayer.Character then startAura(savedAura) end
         else
             stopAura()
         end
     end)
+
     findProps()
     print("MANI GUI V.1 by MANISH_K05")
 end
