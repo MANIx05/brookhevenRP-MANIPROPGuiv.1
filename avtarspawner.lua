@@ -1,14 +1,13 @@
 -- ============================================================
---  ███  MANI AVATAR SPAWNER  ███
---  Client-side dummy avatar spawner with advanced features.
+--  ★ MANI AVATAR SPAWNER ★  (FIXED FULL BUILD)
+--  Client-side dummy avatar spawner.
 --  PC + Mobile executors.
 -- ============================================================
 
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService     = game:GetService("TweenService")
-local LocalPlayer      = Players.LocalPlayer
+local Players     = game:GetService("Players")
+local RunService  = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ============================================================
 -- CONFIG
@@ -50,24 +49,28 @@ local followEnabled   = false
 local wanderActive    = false
 local guardActive     = false
 local spinActive      = false
+local jumpLoopActive  = false
+local autoMsgActive   = false
 local currentMessage  = nil
 local currentScale    = 1
 local currentTrans    = 0
 local forceField      = nil
 local trail           = nil
 local highlight       = nil
+local espBillboard    = nil
 local trailEnabled    = false
 local highlightEnabled= false
 local nametagEnabled  = false
 local rainbowActive   = false
-local lastPos         = nil
-local espBillboard    = nil
+local ffActive        = false
 
--- GUI refs (assigned later)
+-- GUI refs
 local statusLabel, followButton, guardButton, spinButton
 local trailButton, highlightButton, nametagButton, rainbowButton
 local scaleLabel, transLabel
-local dummyListFrame
+local usernameBox, messageBox, delayBox, autoMsgBox, autoMsgBtn, jumpLoopBtn
+local followFastBtn, forceFieldBtn, teleportButton
+local mainFrame, restoreBtn
 
 -- ============================================================
 -- HELPERS
@@ -75,7 +78,7 @@ local dummyListFrame
 local function setStatus(text, color)
     if statusLabel then
         statusLabel.Text = text
-        statusLabel.TextColor3 = color or Color3.fromRGB(160, 160, 175)
+        statusLabel.TextColor3 = color or Color3.fromRGB(160, 220, 180)
     end
 end
 
@@ -107,13 +110,14 @@ local function stopFollow()
     stopLocomotion()
 end
 
-local function stopWander()   wanderActive = false end
-local function stopGuard()    guardActive  = false end
-local function stopSpin()     spinActive   = false end
-local function stopRainbow()  rainbowActive= false end
+local function stopWander()  wanderActive = false end
+local function stopGuard()   guardActive = false end
+local function stopSpin()    spinActive = false end
+local function stopRainbow() rainbowActive = false end
+local function stopJumpLoop() jumpLoopActive = false end
 
 local function fullReset()
-    stopFollow(); stopWander(); stopGuard(); stopSpin(); stopRainbow()
+    stopFollow(); stopWander(); stopGuard(); stopSpin(); stopRainbow(); stopJumpLoop()
     stopEmote(); stopLocomotion()
 end
 
@@ -195,6 +199,7 @@ local function moveDummy(dir)
     local _, hrp = getParts()
     if not hrp then setStatus("No dummy spawned.", Color3.fromRGB(220, 120, 80)); return end
     local cam = workspace.CurrentCamera
+    if not cam then return end
     local look  = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
     local right = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
     if look.Magnitude > 0 then look = look.Unit end
@@ -208,37 +213,24 @@ local function moveDummy(dir)
     if off then hrp.CFrame = hrp.CFrame + off end
 end
 
--- ============================================================
--- ADVANCED FEATURE BUILDERS
--- ============================================================
 local function applyScale(scale)
     if not currentDummy or not currentDummy.Parent then return end
-    local humanoid = currentDummy:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    local desc = humanoid:FindFirstChildOfClass("HumanoidDescription")
-    local h = humanoid:FindFirstChildOfClass("BodyHeightScale")
-    -- Prefer model scale API
     pcall(function() currentDummy:ScaleTo(scale) end)
     currentScale = scale
-    if scaleLabel then
-        scaleLabel.Text = string.format("Scale: %.2f", scale)
-    end
+    if scaleLabel then scaleLabel.Text = string.format("Scale: %.2f", scale) end
 end
 
 local function applyTransparency(t)
     if not currentDummy or not currentDummy.Parent then return end
     for _, part in ipairs(currentDummy:GetDescendants()) do
-        if part:IsA("BasePart") and not part:FindFirstChild("MANI_NoTrans") then
+        if part:IsA("BasePart") then
             part.LocalTransparencyModifier = t
-        end
-        if part:IsA("Decal") then
+        elseif part:IsA("Decal") then
             part.Transparency = t
         end
     end
     currentTrans = t
-    if transLabel then
-        transLabel.Text = string.format("Alpha: %.1f", 1 - t)
-    end
+    if transLabel then transLabel.Text = string.format("Alpha: %.1f", 1 - t) end
 end
 
 local function enableTrail(on)
@@ -248,17 +240,14 @@ local function enableTrail(on)
     if not hrp then return end
     if on then
         if trail and trail.Parent then trail:Destroy() end
-        local a0 = Instance.new("Attachment", hrp)
-        a0.Name = "MANI_TrailA0"
-        a0.Position = Vector3.new(0, 1, 0)
-        local a1 = Instance.new("Attachment", hrp)
-        a1.Name = "MANI_TrailA1"
-        a1.Position = Vector3.new(0, -1, 0)
+        for _, nm in ipairs({"MANI_TrailA0","MANI_TrailA1"}) do
+            local old = hrp:FindFirstChild(nm); if old then old:Destroy() end
+        end
+        local a0 = Instance.new("Attachment", hrp); a0.Name = "MANI_TrailA0"; a0.Position = Vector3.new(0, 1, 0)
+        local a1 = Instance.new("Attachment", hrp); a1.Name = "MANI_TrailA1"; a1.Position = Vector3.new(0, -1, 0)
         local tr = Instance.new("Trail")
-        tr.Attachment0 = a0
-        tr.Attachment1 = a1
-        tr.Lifetime = 1.2
-        tr.MinLength = 0.1
+        tr.Attachment0 = a0; tr.Attachment1 = a1
+        tr.Lifetime = 1.2; tr.MinLength = 0.1
         tr.Color = ColorSequence.new(Color3.fromRGB(120, 200, 255), Color3.fromRGB(200, 120, 255))
         tr.Transparency = NumberSequence.new({
             NumberSequenceKeypoint.new(0, 0.2),
@@ -269,9 +258,8 @@ local function enableTrail(on)
         setStatus("Trail ON", Color3.fromRGB(160, 220, 255))
     else
         if trail and trail.Parent then trail:Destroy() end
-        for _, name in ipairs({"MANI_TrailA0","MANI_TrailA1"}) do
-            local a = hrp:FindFirstChild(name)
-            if a then a:Destroy() end
+        for _, nm in ipairs({"MANI_TrailA0","MANI_TrailA1"}) do
+            local old = hrp:FindFirstChild(nm); if old then old:Destroy() end
         end
         trail = nil
         setStatus("Trail OFF", Color3.fromRGB(160, 160, 175))
@@ -334,13 +322,12 @@ local function enableNametag(on)
 end
 
 local function enableForceField(on)
+    ffActive = on
     if not currentDummy or not currentDummy.Parent then return end
     if on then
         if forceField and forceField.Parent then forceField:Destroy() end
         local ff = Instance.new("ForceField")
-        ff.Name = "MANI_FF"
-        ff.Visible = true
-        ff.Parent = currentDummy
+        ff.Name = "MANI_FF"; ff.Visible = true; ff.Parent = currentDummy
         forceField = ff
         setStatus("Shield ON", Color3.fromRGB(120, 220, 255))
     else
@@ -429,7 +416,6 @@ local function spawnAvatar(username)
     end
     model:PivotTo(CFrame.new(spawnPos))
 
-    -- cleanup previous
     fullReset()
     if currentDummy and currentDummy.Parent then currentDummy:Destroy() end
     if espBillboard and espBillboard.Parent then espBillboard:Destroy() end
@@ -443,10 +429,27 @@ local function spawnAvatar(username)
     highlightEnabled = false
     nametagEnabled = false
     rainbowActive = false
-    if trailButton then trailButton.BackgroundColor3 = Color3.fromRGB(60, 90, 130) end
-    if highlightButton then highlightButton.BackgroundColor3 = Color3.fromRGB(60, 90, 130) end
-    if nametagButton then nametagButton.BackgroundColor3 = Color3.fromRGB(60, 90, 130) end
-    if rainbowButton then rainbowButton.BackgroundColor3 = Color3.fromRGB(90, 60, 130) end
+    ffActive = false
+    if trailButton then
+        trailButton.Text = "✨ Trail: OFF"
+        trailButton.BackgroundColor3 = Color3.fromRGB(60, 90, 130)
+    end
+    if highlightButton then
+        highlightButton.Text = "🔦 Highlight: OFF"
+        highlightButton.BackgroundColor3 = Color3.fromRGB(60, 90, 130)
+    end
+    if nametagButton then
+        nametagButton.Text = "🏷 Nametag: OFF"
+        nametagButton.BackgroundColor3 = Color3.fromRGB(60, 90, 130)
+    end
+    if rainbowButton then
+        rainbowButton.Text = "🌈 Rainbow: OFF"
+        rainbowButton.BackgroundColor3 = Color3.fromRGB(90, 60, 130)
+    end
+    if forceFieldBtn then
+        forceFieldBtn.Text = "🛡 Shield: OFF"
+        forceFieldBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 100)
+    end
 
     setupAnimations(model)
     makeESP()
@@ -456,20 +459,21 @@ local function spawnAvatar(username)
 end
 
 -- ============================================================
--- GUI
+-- GUI BUILD
 -- ============================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MANI_AVATAR_SPAWNER"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.IgnoreGuiInset = true
-screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+screenGui.DisplayOrder = 999
+screenGui.Parent = PlayerGui
 
--- MAIN FRAME
-local mainFrame = Instance.new("Frame")
+-- MAIN
+mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 320, 0, 560)
-mainFrame.Position = UDim2.new(0.5, -160, 0.1, 0)
+mainFrame.Position = UDim2.new(0.5, -160, 0.5, -280)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -479,15 +483,6 @@ Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 local mainStroke = Instance.new("UIStroke", mainFrame)
 mainStroke.Color = Color3.fromRGB(90, 130, 220)
 mainStroke.Thickness = 1.5
-
--- Gradient background
-local grad = Instance.new("UIGradient")
-grad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 28, 42)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 16, 24)),
-})
-grad.Rotation = 90
-grad.Parent = mainFrame
 
 -- TITLE BAR
 local titleBar = Instance.new("Frame")
@@ -530,8 +525,8 @@ closeButton.Font = Enum.Font.GothamBold
 closeButton.Parent = titleBar
 Instance.new("UICorner", closeButton).CornerRadius = UDim.new(0, 6)
 
--- MINIMIZED BUTTON
-local restoreBtn = Instance.new("TextButton")
+-- RESTORE BUTTON
+restoreBtn = Instance.new("TextButton")
 restoreBtn.Size = UDim2.new(0, 60, 0, 60)
 restoreBtn.Position = UDim2.new(0, 20, 0.5, -30)
 restoreBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 220)
@@ -548,7 +543,7 @@ local rstroke = Instance.new("UIStroke", restoreBtn)
 rstroke.Color = Color3.fromRGB(255, 220, 100)
 rstroke.Thickness = 2
 
--- TAB BAR (Categories)
+-- TAB BAR
 local tabBar = Instance.new("Frame")
 tabBar.Size = UDim2.new(1, -8, 0, 30)
 tabBar.Position = UDim2.new(0, 4, 0, 42)
@@ -562,9 +557,17 @@ tabScroll.Size = UDim2.new(1, 0, 1, 0)
 tabScroll.BackgroundTransparency = 1
 tabScroll.BorderSizePixel = 0
 tabScroll.ScrollBarThickness = 0
-tabScroll.CanvasSize = UDim2.new(0, 700, 0, 0)
+tabScroll.CanvasSize = UDim2.new(0, 560, 0, 0)
 tabScroll.ScrollDirection = Enum.ScrollDirection.Horizontal
 tabScroll.Parent = tabBar
+
+-- PAGES CONTAINER (single Frame, children swap visibility)
+local pagesContainer = Instance.new("Frame")
+pagesContainer.Size = UDim2.new(1, -8, 1, -78)
+pagesContainer.Position = UDim2.new(0, 4, 0, 76)
+pagesContainer.BackgroundTransparency = 1
+pagesContainer.ClipsDescendants = true
+pagesContainer.Parent = mainFrame
 
 local pages = {}
 local tabButtons = {}
@@ -584,15 +587,15 @@ local function createTab(name, order)
 
     local page = Instance.new("ScrollingFrame")
     page.Name = name .. "Page"
-    page.Size = UDim2.new(1, -8, 1, -78)
-    page.Position = UDim2.new(0, 4, 0, 76)
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.Position = UDim2.new(0, 0, 0, 0)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 4
     page.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 130)
-    page.CanvasSize = UDim2.new(0, 0, 0, 700)
+    page.CanvasSize = UDim2.new(0, 0, 0, 400)
     page.Visible = false
-    page.Parent = mainFrame
+    page.Parent = pagesContainer
     pages[name] = page
     return page
 end
@@ -610,14 +613,7 @@ local function showTab(name)
     end
 end
 
-local pageMain  = createTab("Spawn",   1)
-local pageMove  = createTab("Move",    2)
-local pageAnims = createTab("Emotes",  3)
-local pageTasks = createTab("Tasks",   4)
-local pageVis   = createTab("Visuals", 5)
-local pageMsg   = createTab("Message", 6)
-
--- GUI helper funcs
+-- GUI HELPERS
 local function mkLabel(parent, x, y, w, text, color)
     local l = Instance.new("TextLabel")
     l.Size = UDim2.new(0, w, 0, 14)
@@ -666,50 +662,66 @@ local function mkTextBox(parent, x, y, w, h, ph)
 end
 
 -- ============================================================
--- PAGE: SPAWN
+-- BUILD TABS
+-- ============================================================
+local pageMain  = createTab("Spawn",   1)
+local pageMove  = createTab("Move",    2)
+local pageAnims = createTab("Emotes",  3)
+local pageTasks = createTab("Tasks",   4)
+local pageVis   = createTab("Visuals", 5)
+local pageMsg   = createTab("Message", 6)
+
+-- Set per-page canvas sizes
+pageMain.CanvasSize  = UDim2.new(0, 0, 0, 340)
+pageMove.CanvasSize  = UDim2.new(0, 0, 0, 320)
+pageAnims.CanvasSize = UDim2.new(0, 0, 0, 340)
+pageTasks.CanvasSize = UDim2.new(0, 0, 0, 320)
+pageVis.CanvasSize   = UDim2.new(0, 0, 0, 260)
+pageMsg.CanvasSize   = UDim2.new(0, 0, 0, 400)
+
+-- ============================================================
+-- PAGE 1 : SPAWN
 -- ============================================================
 mkLabel(pageMain, 4, 6, 300, "Roblox Username:")
-local usernameBox = mkTextBox(pageMain, 4, 22, 300, 34, "e.g. Builderman")
+usernameBox = mkTextBox(pageMain, 4, 22, 300, 34, "e.g. Builderman")
 
 local spawnButton = mkButton(pageMain, 4, 62, 200, 36, "★ SPAWN AVATAR ★", Color3.fromRGB(60, 130, 220))
 local deleteButton = mkButton(pageMain, 210, 62, 94, 36, "Delete", Color3.fromRGB(160, 55, 55))
 
-mkLabel(pageMain, 4, 106, 300, "Quick Spawn (Recent):")
+mkLabel(pageMain, 4, 108, 300, "Quick Spawn (your friends):")
 local quickBoxes = {}
 for i = 1, 5 do
-    local b = mkButton(pageMain, 4, 124 + (i-1)*30, 300, 26, "(empty)", Color3.fromRGB(45, 45, 65))
+    local b = mkButton(pageMain, 4, 126 + (i-1)*32, 300, 28, "  (loading...)", Color3.fromRGB(45, 45, 65))
     b.TextXAlignment = Enum.TextXAlignment.Left
-    b.Text = "  (empty slot " .. i .. ")"
     quickBoxes[i] = b
 end
 
--- Refresh recent with real usernames
 local function refreshQuick()
-    local ok, pages2 = pcall(function() return Players:GetFriendsAsync(LocalPlayer.UserId) end)
-    -- Simpler: fill with random online friends if available
-    local friends = {}
-    local success, pagesEnum = pcall(function() return Players:GetFriendsAsync(LocalPlayer.UserId) end)
-    if success then
-        for _ = 1, 5 do
-            local page = pagesEnum:GetCurrentPage()
-            for _, item in ipairs(page) do
-                if #friends < 5 then
+    task.spawn(function()
+        local friends = {}
+        local ok = pcall(function()
+            local pagesEnum = Players:GetFriendsAsync(LocalPlayer.UserId)
+            while true do
+                local current = pagesEnum:GetCurrentPage()
+                for _, item in ipairs(current) do
+                    if #friends >= 5 then break end
                     table.insert(friends, item.Username)
                 end
+                if pagesEnum.IsFinished or #friends >= 5 then break end
+                local okAdvance = pcall(function() pagesEnum:AdvanceToNextPageAsync() end)
+                if not okAdvance then break end
             end
-            if pagesEnum.IsFinished then break end
-            pcall(function() pagesEnum:AdvanceToNextPageAsync() end)
+        end)
+        for i = 1, 5 do
+            if friends[i] then
+                quickBoxes[i].Text = "  ▶ " .. friends[i]
+                quickBoxes[i]:SetAttribute("Username", friends[i])
+            else
+                quickBoxes[i].Text = "  (no friend slot " .. i .. ")"
+                quickBoxes[i]:SetAttribute("Username", nil)
+            end
         end
-    end
-    for i = 1, 5 do
-        if friends[i] then
-            quickBoxes[i].Text = "  ▶ " .. friends[i]
-            quickBoxes[i]:SetAttribute("Username", friends[i])
-        else
-            quickBoxes[i].Text = "  (empty slot " .. i .. ")"
-            quickBoxes[i]:SetAttribute("Username", nil)
-        end
-    end
+    end)
 end
 
 for _, b in ipairs(quickBoxes) do
@@ -723,9 +735,9 @@ for _, b in ipairs(quickBoxes) do
 end
 
 -- ============================================================
--- PAGE: MOVE
+-- PAGE 2 : MOVE
 -- ============================================================
-mkLabel(pageMove, 4, 6, 300, "D-Pad  (relative to camera):")
+mkLabel(pageMove, 4, 6, 300, "D-Pad  (camera-relative):")
 
 local dpadFrame = Instance.new("Frame")
 dpadFrame.Size = UDim2.new(0, 120, 0, 120)
@@ -752,10 +764,26 @@ cDot.BorderSizePixel = 0
 cDot.Parent = dpadFrame
 Instance.new("UICorner", cDot).CornerRadius = UDim.new(1, 0)
 
-local yUpBtn   = mkButton(pageMove, 4,   152, 145, 30, "▲ Height +", Color3.fromRGB(55, 100, 75))
-local yDnBtn   = mkButton(pageMove, 155, 152, 149, 30, "▼ Height −", Color3.fromRGB(100, 55, 55))
+mkButton(pageMove, 4,   152, 145, 30, "▲ Height +", Color3.fromRGB(55, 100, 75)).MouseButton1Click:Connect(function()
+    local _, hrp = getParts()
+    if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0, CONFIG.MoveStep, 0) end
+end)
+mkButton(pageMove, 155, 152, 149, 30, "▼ Height −", Color3.fromRGB(100, 55, 55)).MouseButton1Click:Connect(function()
+    local _, hrp = getParts()
+    if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0, -CONFIG.MoveStep, 0) end
+end)
 
-local teleportButton = mkButton(pageMove, 4, 188, 300, 32, "⚡ Teleport to Me", Color3.fromRGB(100, 100, 200))
+teleportButton = mkButton(pageMove, 4, 188, 300, 32, "⚡ Teleport to Me", Color3.fromRGB(100, 100, 200))
+teleportButton.MouseButton1Click:Connect(function()
+    local _, hrp = getParts()
+    local ch = LocalPlayer.Character
+    if not hrp or not ch then setStatus("No dummy.", Color3.fromRGB(220, 120, 80)); return end
+    local myHrp = ch:FindFirstChild("HumanoidRootPart")
+    if myHrp then
+        hrp.CFrame = CFrame.new(myHrp.Position + myHrp.CFrame.LookVector * 6 + Vector3.new(0, 3, 0))
+        setStatus("Teleported to you.", Color3.fromRGB(80, 200, 120))
+    end
+end)
 
 mkLabel(pageMove, 4, 226, 300, "Position Shortcuts:")
 mkButton(pageMove, 4,   242, 96, 28, "Above Me",  Color3.fromRGB(70, 110, 90)).MouseButton1Click:Connect(function()
@@ -782,7 +810,7 @@ mkButton(pageMove, 204, 242, 100, 28, "On My Spot", Color3.fromRGB(110, 70, 130)
 end)
 
 -- ============================================================
--- PAGE: EMOTES
+-- PAGE 3 : EMOTES
 -- ============================================================
 mkLabel(pageAnims, 4, 6, 300, "Loop Emotes:")
 
@@ -797,48 +825,113 @@ local btnSit   = mkButton(pageAnims, 204, 58, 100,32, "🪑 Sit",   Color3.fromR
 local btnHug   = mkButton(pageAnims, 4,   94, 200,32, "🤗 HUG ME (walks to you)", Color3.fromRGB(190, 80, 160))
 local btnLay   = mkButton(pageAnims, 208, 94, 96, 32, "🛌 Lay", Color3.fromRGB(90, 90, 150))
 
-local btnStopEmote = mkButton(pageAnims, 4, 130, 300, 32, "⏹ Stop All Animations", Color3.fromRGB(150, 60, 60))
+mkButton(pageAnims, 4, 130, 300, 32, "⏹ Stop All Animations", Color3.fromRGB(150, 60, 60))
 
-mkLabel(pageAnims, 4, 172, 300, "Character Customization:")
-local scaleLabel = mkLabel(pageAnims, 4, 190, 300, "Scale: 1.00", Color3.fromRGB(180, 220, 255))
-local scaleUpBtn   = mkButton(pageAnims, 4,   208, 74, 28, "Scale +", Color3.fromRGB(60, 90, 140))
-local scaleDnBtn   = mkButton(pageAnims, 82,  208, 74, 28, "Scale −", Color3.fromRGB(60, 90, 140))
-local scaleRstBtn  = mkButton(pageAnims, 160, 208, 144,28, "Reset Scale", Color3.fromRGB(90, 90, 130))
+mkLabel(pageAnims, 4, 172, 300, "Customization:")
+scaleLabel = mkLabel(pageAnims, 4, 190, 300, "Scale: 1.00", Color3.fromRGB(180, 220, 255))
+mkButton(pageAnims, 4,   208, 74, 28, "Scale +", Color3.fromRGB(60, 90, 140)).MouseButton1Click:Connect(function()
+    applyScale(math.min(CONFIG.ScaleMax, currentScale + CONFIG.ScaleStep))
+end)
+mkButton(pageAnims, 82,  208, 74, 28, "Scale −", Color3.fromRGB(60, 90, 140)).MouseButton1Click:Connect(function()
+    applyScale(math.max(CONFIG.ScaleMin, currentScale - CONFIG.ScaleStep))
+end)
+mkButton(pageAnims, 160, 208, 144,28, "Reset Scale", Color3.fromRGB(90, 90, 130)).MouseButton1Click:Connect(function()
+    applyScale(1)
+end)
 
-local transLabel   = mkLabel(pageAnims, 4, 244, 300, "Alpha: 1.0", Color3.fromRGB(200, 200, 240))
-local transUpBtn   = mkButton(pageAnims, 4,   262, 74, 28, "Alpha +", Color3.fromRGB(90, 90, 140))
-local transDnBtn   = mkButton(pageAnims, 82,  262, 74, 28, "Alpha −", Color3.fromRGB(90, 90, 140))
-local transRstBtn  = mkButton(pageAnims, 160, 262, 144,28, "Reset Alpha", Color3.fromRGB(90, 90, 130))
+transLabel = mkLabel(pageAnims, 4, 244, 300, "Alpha: 1.0", Color3.fromRGB(200, 200, 240))
+mkButton(pageAnims, 4,   262, 74, 28, "Alpha +", Color3.fromRGB(90, 90, 140)).MouseButton1Click:Connect(function()
+    applyTransparency(math.max(0, currentTrans - CONFIG.TransparencyStep))
+end)
+mkButton(pageAnims, 82,  262, 74, 28, "Alpha −", Color3.fromRGB(90, 90, 140)).MouseButton1Click:Connect(function()
+    applyTransparency(math.min(1, currentTrans + CONFIG.TransparencyStep))
+end)
+mkButton(pageAnims, 160, 262, 144,28, "Reset Alpha", Color3.fromRGB(90, 90, 130)).MouseButton1Click:Connect(function()
+    applyTransparency(0)
+end)
 
 -- ============================================================
--- PAGE: TASKS
+-- PAGE 4 : TASKS
 -- ============================================================
 mkLabel(pageTasks, 4, 6, 300, "Behavior Tasks:")
 
 guardButton = mkButton(pageTasks, 4, 22, 148, 34, "🛡 Guard Me", Color3.fromRGB(70, 130, 100))
 spinButton  = mkButton(pageTasks, 156, 22, 148, 34, "🌀 Spin",     Color3.fromRGB(120, 90, 160))
 
-local walkBtn = mkButton(pageTasks, 4, 62, 148, 32, "🚶 Walk to Me", Color3.fromRGB(60, 110, 170))
-local jumpBtn = mkButton(pageTasks, 156, 62, 148, 32, "⬆ Jump",     Color3.fromRGB(60, 110, 170))
+mkButton(pageTasks, 4, 62, 148, 32, "🚶 Walk to Me", Color3.fromRGB(60, 110, 170)).MouseButton1Click:Connect(function()
+    local humanoid, hrp = getParts()
+    local ch = LocalPlayer.Character
+    if not humanoid or not hrp or not ch then return end
+    local myHrp = ch:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return end
+    stopFollow(); stopWander(); stopGuard(); stopSpin(); stopEmote()
+    hrp.Anchored = false
+    humanoid.PlatformStand = false
+    humanoid:MoveTo(myHrp.Position)
+    setStatus("Walking to you...", Color3.fromRGB(120, 220, 160))
+end)
+mkButton(pageTasks, 156, 62, 148, 32, "⬆ Jump", Color3.fromRGB(60, 110, 170)).MouseButton1Click:Connect(function()
+    local humanoid = getParts()
+    if humanoid then humanoid.Jump = true; setStatus("Jump!", Color3.fromRGB(120, 220, 160)) end
+end)
 
-local wanderBtn = mkButton(pageTasks, 4, 100, 148, 32, "🌍 Wander",   Color3.fromRGB(60, 130, 130))
-local freezeBtn = mkButton(pageTasks, 156, 100, 148, 32, "❄ Freeze", Color3.fromRGB(90, 130, 170))
+mkButton(pageTasks, 4, 100, 148, 32, "🌍 Wander", Color3.fromRGB(60, 130, 130)).MouseButton1Click:Connect(function()
+    local humanoid, hrp = getParts()
+    if not humanoid or not hrp then return end
+    stopFollow(); stopGuard(); stopSpin(); stopEmote()
+    hrp.Anchored = false
+    humanoid.PlatformStand = false
+    wanderActive = true
+    setStatus("Wandering...", Color3.fromRGB(180, 200, 120))
+    task.spawn(function()
+        while wanderActive and currentDummy and currentDummy.Parent do
+            local pos = hrp.Position
+            humanoid:MoveTo(pos + Vector3.new(math.random(-15, 15), 0, math.random(-15, 15)))
+            task.wait(2 + math.random() * 2)
+        end
+    end)
+end)
+mkButton(pageTasks, 156, 100, 148, 32, "❄ Freeze", Color3.fromRGB(90, 130, 170)).MouseButton1Click:Connect(function()
+    local humanoid, hrp = getParts()
+    if humanoid and hrp then
+        stopFollow(); stopWander(); stopGuard(); stopSpin(); stopEmote(); stopLocomotion()
+        humanoid:MoveTo(hrp.Position)
+        setStatus("Frozen.", Color3.fromRGB(160, 200, 240))
+    end
+end)
 
-local followInline = mkButton(pageTasks, 4, 138, 148, 34, "Follow: OFF", Color3.fromRGB(60, 60, 80))
-followButton = followInline
-
-local forceFieldBtn = mkButton(pageTasks, 156, 138, 148, 34, "🛡 Shield: OFF", Color3.fromRGB(70, 70, 100))
+followButton = mkButton(pageTasks, 4, 138, 148, 34, "Follow: OFF", Color3.fromRGB(60, 60, 80))
+forceFieldBtn = mkButton(pageTasks, 156, 138, 148, 34, "🛡 Shield: OFF", Color3.fromRGB(70, 70, 100))
 
 mkLabel(pageTasks, 4, 182, 300, "Advanced:")
+jumpLoopBtn = mkButton(pageTasks, 4, 198, 148, 32, "Jump Loop", Color3.fromRGB(110, 90, 130))
+mkButton(pageTasks, 156, 198, 148, 32, "Face Me", Color3.fromRGB(110, 90, 130)).MouseButton1Click:Connect(function()
+    local _, hrp = getParts()
+    local ch = LocalPlayer.Character
+    if not hrp or not ch then return end
+    local myHrp = ch:FindFirstChild("HumanoidRootPart")
+    if not myHrp then return end
+    local look = Vector3.new(myHrp.Position.X - hrp.Position.X, 0, myHrp.Position.Z - hrp.Position.Z)
+    if look.Magnitude > 0.1 then
+        hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + look.Unit)
+        setStatus("Facing you.", Color3.fromRGB(160, 220, 200))
+    end
+end)
 
-local jumpLoopBtn = mkButton(pageTasks, 4, 198, 148, 32, "Jump Loop", Color3.fromRGB(110, 90, 130))
-local faceMeBtn   = mkButton(pageTasks, 156, 198, 148, 32, "Face Me", Color3.fromRGB(110, 90, 130))
-
-local followFastBtn = mkButton(pageTasks, 4, 234, 148, 32, "Follow Speed: 18", Color3.fromRGB(70, 100, 140))
-local tpOnJumpBtn   = mkButton(pageTasks, 156, 234, 148, 32, "Closest to Me", Color3.fromRGB(70, 100, 140))
+followFastBtn = mkButton(pageTasks, 4, 234, 148, 32, "Follow Speed: 18", Color3.fromRGB(70, 100, 140))
+mkButton(pageTasks, 156, 234, 148, 32, "Snap to Me", Color3.fromRGB(70, 100, 140)).MouseButton1Click:Connect(function()
+    local _, hrp = getParts()
+    local ch = LocalPlayer.Character
+    if not hrp or not ch then return end
+    local myHrp = ch:FindFirstChild("HumanoidRootPart")
+    if myHrp then
+        hrp.CFrame = CFrame.new(myHrp.Position + Vector3.new(0, 0.5, 0))
+        setStatus("Snapped to you.", Color3.fromRGB(160, 220, 200))
+    end
+end)
 
 -- ============================================================
--- PAGE: VISUALS
+-- PAGE 5 : VISUALS
 -- ============================================================
 mkLabel(pageVis, 4, 6, 300, "Dummy Aesthetics:")
 
@@ -847,8 +940,8 @@ highlightButton = mkButton(pageVis, 156, 24, 148, 34, "🔦 Highlight: OFF", Col
 nametagButton   = mkButton(pageVis, 4,   62, 148, 34, "🏷 Nametag: OFF",   Color3.fromRGB(60, 90, 130))
 rainbowButton   = mkButton(pageVis, 156, 62, 148, 34, "🌈 Rainbow: OFF",   Color3.fromRGB(90, 60, 130))
 
-mkLabel(pageVis, 4, 104, 300, "Extra Visuals:")
-mkButton(pageVis, 4, 120, 148, 32, "Toggle ESP",     Color3.fromRGB(60, 130, 90)).MouseButton1Click:Connect(function()
+mkLabel(pageVis, 4, 104, 300, "Extra:")
+mkButton(pageVis, 4, 120, 148, 32, "Toggle ESP", Color3.fromRGB(60, 130, 90)).MouseButton1Click:Connect(function()
     if espBillboard and espBillboard.Parent then
         espBillboard:Destroy(); espBillboard = nil
         setStatus("ESP removed.", Color3.fromRGB(160, 160, 175))
@@ -856,7 +949,7 @@ mkButton(pageVis, 4, 120, 148, 32, "Toggle ESP",     Color3.fromRGB(60, 130, 90)
         makeESP(); setStatus("ESP enabled.", Color3.fromRGB(120, 220, 160))
     end
 end)
-mkButton(pageVis, 156, 120, 148, 32, "Camera on Dummy", Color3.fromRGB(130, 90, 60)).MouseButton1Click:Connect(function()
+mkButton(pageVis, 156, 120, 148, 32, "Camera → Dummy", Color3.fromRGB(130, 90, 60)).MouseButton1Click:Connect(function()
     local _, hrp = getParts()
     if hrp then
         workspace.CurrentCamera.CameraSubject = hrp
@@ -865,21 +958,24 @@ mkButton(pageVis, 156, 120, 148, 32, "Camera on Dummy", Color3.fromRGB(130, 90, 
 end)
 mkButton(pageVis, 4, 156, 148, 32, "Camera → Me", Color3.fromRGB(130, 90, 60)).MouseButton1Click:Connect(function()
     local ch = LocalPlayer.Character
-    if ch and ch:FindFirstChildOfClass("Humanoid") then
-        workspace.CurrentCamera.CameraSubject = ch:FindFirstChildOfClass("Humanoid")
-        setStatus("Camera → You", Color3.fromRGB(255, 200, 120))
+    if ch then
+        local h = ch:FindFirstChildOfClass("Humanoid")
+        if h then
+            workspace.CurrentCamera.CameraSubject = h
+            setStatus("Camera → You", Color3.fromRGB(255, 200, 120))
+        end
     end
 end)
-mkButton(pageVis, 156, 156, 148, 32, "Hide All GUIs", Color3.fromRGB(90, 60, 60)).MouseButton1Click:Connect(function()
+mkButton(pageVis, 156, 156, 148, 32, "Hide GUIs", Color3.fromRGB(90, 60, 60)).MouseButton1Click:Connect(function()
     mainFrame.Visible = false
     restoreBtn.Visible = true
 end)
 
 -- ============================================================
--- PAGE: MESSAGE
+-- PAGE 6 : MESSAGE
 -- ============================================================
 mkLabel(pageMsg, 4, 6, 300, "Fake Message Dummy Will 'Say':")
-local messageBox = mkTextBox(pageMsg, 4, 22, 300, 34, "Type a message...")
+messageBox = mkTextBox(pageMsg, 4, 22, 300, 34, "Type a message...")
 
 mkLabel(pageMsg, 4, 62, 300, "Quick Phrases:")
 local phrases = {
@@ -894,57 +990,27 @@ for i, p in ipairs(phrases) do
     local row = math.floor((i-1)/2)
     local col = (i-1) % 2
     local b = mkButton(pageMsg, 4 + col*152, 78 + row*30, 148, 26, p, Color3.fromRGB(60, 60, 90))
-    b.MouseButton1Click:Connect(function()
-        messageBox.Text = p
-    end)
+    b.MouseButton1Click:Connect(function() messageBox.Text = p end)
 end
 
 mkLabel(pageMsg, 4, 174, 300, "Delay (seconds):")
-local delayBox = mkTextBox(pageMsg, 4, 192, 140, 32, "e.g. 5")
+delayBox = mkTextBox(pageMsg, 4, 192, 140, 32, "e.g. 5")
 
 local sendNowBtn  = mkButton(pageMsg, 4,   232, 148, 34, "💬 Send Now",   Color3.fromRGB(60, 130, 80))
 local scheduleBtn = mkButton(pageMsg, 156, 232, 148, 34, "⏰ Schedule",  Color3.fromRGB(130, 100, 60))
 
 mkLabel(pageMsg, 4, 274, 300, "Auto Message Loop:")
-local autoMsgBox = mkTextBox(pageMsg, 4, 292, 200, 30, "Auto msg text")
-local autoMsgBtn = mkButton(pageMsg, 208, 292, 96, 30, "Auto: OFF", Color3.fromRGB(70, 70, 100))
-
-local autoMsgActive = false
-local autoMsgTask   = nil
-autoMsgBtn.MouseButton1Click:Connect(function()
-    if autoMsgActive then
-        autoMsgActive = false
-        autoMsgBtn.Text = "Auto: OFF"
-        autoMsgBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 100)
-        setStatus("Auto message OFF.", Color3.fromRGB(160, 160, 175))
-        return
-    end
-    if not currentDummy or not currentDummy.Parent then
-        setStatus("Spawn a dummy first.", Color3.fromRGB(220, 120, 80)); return
-    end
-    autoMsgActive = true
-    autoMsgBtn.Text = "Auto: ON"
-    autoMsgBtn.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
-    setStatus("Auto message ON.", Color3.fromRGB(120, 220, 160))
-    task.spawn(function()
-        while autoMsgActive do
-            local txt = autoMsgBox.Text
-            if txt ~= "" and currentDummy and currentDummy.Parent then
-                showMessage(txt, 4)
-            end
-            task.wait(8)
-        end
-    end)
-end)
+autoMsgBox = mkTextBox(pageMsg, 4, 292, 200, 30, "Auto msg text")
+autoMsgBtn = mkButton(pageMsg, 208, 292, 96, 30, "Auto: OFF", Color3.fromRGB(70, 70, 100))
 
 -- ============================================================
--- STATUS LABEL (bottom of main frame)
+-- STATUS BAR
 -- ============================================================
 statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -12, 0, 22)
 statusLabel.Position = UDim2.new(0, 6, 1, -26)
 statusLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-statusLabel.BackgroundTransparency = 0.3
+statusLabel.BackgroundTransparency = 0.2
 statusLabel.Text = ""
 statusLabel.TextColor3 = Color3.fromRGB(160, 220, 180)
 statusLabel.TextSize = 11
@@ -953,9 +1019,11 @@ statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.TextWrapped = true
 statusLabel.Parent = mainFrame
 Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 6)
+local spad = Instance.new("UIPadding", statusLabel)
+spad.PaddingLeft = UDim.new(0, 6)
 
 -- ============================================================
--- MINIMIZE / RESTORE
+-- MINIMIZE / RESTORE / CLOSE
 -- ============================================================
 minButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
@@ -964,6 +1032,12 @@ end)
 restoreBtn.MouseButton1Click:Connect(function()
     mainFrame.Visible = true
     restoreBtn.Visible = false
+end)
+closeButton.MouseButton1Click:Connect(function()
+    fullReset()
+    if currentDummy and currentDummy.Parent then currentDummy:Destroy() end
+    if espBillboard and espBillboard.Parent then espBillboard:Destroy() end
+    screenGui:Destroy()
 end)
 
 -- ============================================================
@@ -988,15 +1062,15 @@ deleteButton.MouseButton1Click:Connect(function()
 end)
 
 -- Follow
-followInline.MouseButton1Click:Connect(function()
+followButton.MouseButton1Click:Connect(function()
     if not currentDummy or not currentDummy.Parent then
         setStatus("Spawn a dummy first.", Color3.fromRGB(220, 120, 80)); return
     end
     followEnabled = not followEnabled
     if followEnabled then
         stopWander(); stopGuard(); stopSpin(); stopEmote(); stopRainbow()
-        followInline.Text = "Follow: ON"
-        followInline.BackgroundColor3 = Color3.fromRGB(60, 180, 100)
+        followButton.Text = "Follow: ON"
+        followButton.BackgroundColor3 = Color3.fromRGB(60, 180, 100)
         local humanoid, hrp = getParts()
         if hrp then hrp.Anchored = false end
         if humanoid then humanoid.PlatformStand = false end
@@ -1056,9 +1130,7 @@ spinButton.MouseButton1Click:Connect(function()
         task.spawn(function()
             while spinActive and currentDummy and currentDummy.Parent do
                 local _, hrp = getParts()
-                if hrp then
-                    hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(10), 0)
-                end
+                if hrp then hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(10), 0) end
                 task.wait(0.03)
             end
         end)
@@ -1070,65 +1142,14 @@ spinButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Task buttons
-walkBtn.MouseButton1Click:Connect(function()
-    local humanoid, hrp = getParts()
-    local ch = LocalPlayer.Character
-    if not humanoid or not hrp or not ch then return end
-    local myHrp = ch:FindFirstChild("HumanoidRootPart")
-    if not myHrp then return end
-    stopFollow(); stopWander(); stopGuard(); stopSpin(); stopEmote()
-    if hrp.Anchored then hrp.Anchored = false end
-    humanoid.PlatformStand = false
-    humanoid:MoveTo(myHrp.Position)
-    setStatus("Walking to you...", Color3.fromRGB(120, 220, 160))
-end)
-
-jumpBtn.MouseButton1Click:Connect(function()
-    local humanoid = getParts()
-    if humanoid then
-        humanoid.Jump = true
-        setStatus("Jump!", Color3.fromRGB(120, 220, 160))
-    end
-end)
-
-wanderBtn.MouseButton1Click:Connect(function()
-    local humanoid, hrp = getParts()
-    if not humanoid or not hrp then return end
-    stopFollow(); stopGuard(); stopSpin(); stopEmote()
-    hrp.Anchored = false
-    humanoid.PlatformStand = false
-    wanderActive = true
-    setStatus("Wandering...", Color3.fromRGB(180, 200, 120))
-    task.spawn(function()
-        while wanderActive and currentDummy and currentDummy.Parent do
-            local pos = hrp.Position
-            humanoid:MoveTo(pos + Vector3.new(math.random(-15, 15), 0, math.random(-15, 15)))
-            task.wait(2 + math.random() * 2)
-        end
-    end)
-end)
-
-freezeBtn.MouseButton1Click:Connect(function()
-    local humanoid, hrp = getParts()
-    if humanoid and hrp then
-        stopFollow(); stopWander(); stopGuard(); stopSpin(); stopEmote(); stopLocomotion()
-        humanoid:MoveTo(hrp.Position)
-        setStatus("Frozen.", Color3.fromRGB(160, 200, 240))
-    end
-end)
-
--- Force field
-local ffActive = false
+-- Shield
 forceFieldBtn.MouseButton1Click:Connect(function()
-    ffActive = not ffActive
-    enableForceField(ffActive)
+    enableForceField(not ffActive)
     forceFieldBtn.Text = ffActive and "🛡 Shield: ON" or "🛡 Shield: OFF"
     forceFieldBtn.BackgroundColor3 = ffActive and Color3.fromRGB(80, 180, 220) or Color3.fromRGB(70, 70, 100)
 end)
 
 -- Jump loop
-local jumpLoopActive = false
 jumpLoopBtn.MouseButton1Click:Connect(function()
     jumpLoopActive = not jumpLoopActive
     jumpLoopBtn.Text = jumpLoopActive and "Stop Jump Loop" or "Jump Loop"
@@ -1144,19 +1165,7 @@ jumpLoopBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-faceMeBtn.MouseButton1Click:Connect(function()
-    local _, hrp = getParts()
-    local ch = LocalPlayer.Character
-    if not hrp or not ch then return end
-    local myHrp = ch:FindFirstChild("HumanoidRootPart")
-    if not myHrp then return end
-    local look = Vector3.new(myHrp.Position.X - hrp.Position.X, 0, myHrp.Position.Z - hrp.Position.Z)
-    if look.Magnitude > 0.1 then
-        hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + look.Unit)
-        setStatus("Facing you.", Color3.fromRGB(160, 220, 200))
-    end
-end)
-
+-- Follow speed cycle
 followFastBtn.MouseButton1Click:Connect(function()
     local humanoid = getParts()
     if not humanoid then return end
@@ -1167,20 +1176,10 @@ followFastBtn.MouseButton1Click:Connect(function()
     setStatus("Follow speed = " .. CONFIG.FollowWalkSpeed, Color3.fromRGB(160, 200, 240))
 end)
 
-tpOnJumpBtn.MouseButton1Click:Connect(function()
-    local _, hrp = getParts()
-    local ch = LocalPlayer.Character
-    if not hrp or not ch then return end
-    local myHrp = ch:FindFirstChild("HumanoidRootPart")
-    if not myHrp then return end
-    hrp.CFrame = CFrame.new(myHrp.Position + Vector3.new(0, 0.5, 0))
-    setStatus("Snapped to you.", Color3.fromRGB(160, 220, 200))
-end)
-
 -- Emotes
-btnWave.MouseButton1Click:Connect(function() stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Wave, true); setStatus("Waving", Color3.fromRGB(180,220,255)) end)
+btnWave.MouseButton1Click:Connect(function()  stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Wave, true);  setStatus("Waving",   Color3.fromRGB(180,220,255)) end)
 btnPoint.MouseButton1Click:Connect(function() stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Point, true); setStatus("Pointing", Color3.fromRGB(180,220,255)) end)
-btnDance.MouseButton1Click:Connect(function() stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Dance, true); setStatus("Dancing", Color3.fromRGB(180,220,255)) end)
+btnDance.MouseButton1Click:Connect(function() stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Dance, true); setStatus("Dancing",  Color3.fromRGB(180,220,255)) end)
 btnLaugh.MouseButton1Click:Connect(function() stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Laugh, true); setStatus("Laughing", Color3.fromRGB(180,220,255)) end)
 btnCheer.MouseButton1Click:Connect(function() stopFollow(); stopWander(); stopGuard(); stopSpin(); playEmote(EMOTES.Cheer, true); setStatus("Cheering", Color3.fromRGB(180,220,255)) end)
 btnSit.MouseButton1Click:Connect(function()
@@ -1203,7 +1202,7 @@ btnHug.MouseButton1Click:Connect(function()
     local myHrp = ch:FindFirstChild("HumanoidRootPart")
     if not myHrp then return end
     stopFollow(); stopWander(); stopGuard(); stopSpin(); stopEmote(); stopLocomotion()
-    if hrp.Anchored then hrp.Anchored = false end
+    hrp.Anchored = false
     humanoid.PlatformStand = false
     setStatus("Walking to hug you...", Color3.fromRGB(240, 180, 220))
     task.spawn(function()
@@ -1226,72 +1225,41 @@ btnHug.MouseButton1Click:Connect(function()
         setStatus("Hugging you!", Color3.fromRGB(240, 120, 180))
     end)
 end)
-btnStopEmote.MouseButton1Click:Connect(function()
-    local humanoid = getParts()
-    stopEmote(); stopLocomotion(); stopWander(); stopGuard(); stopSpin()
-    if humanoid then humanoid.Sit = false end
-    setStatus("Animations stopped.", Color3.fromRGB(160, 160, 175))
-end)
+-- Stop all animations button
+for _, c in ipairs(pageAnims:GetChildren()) do
+    if c:IsA("TextButton") and c.Text:find("Stop All") then
+        c.MouseButton1Click:Connect(function()
+            local humanoid = getParts()
+            stopEmote(); stopLocomotion(); stopWander(); stopGuard(); stopSpin()
+            if humanoid then humanoid.Sit = false end
+            setStatus("Animations stopped.", Color3.fromRGB(160, 160, 175))
+        end)
+    end
+end
 
--- Scale buttons
-scaleUpBtn.MouseButton1Click:Connect(function()
-    local s = math.min(CONFIG.ScaleMax, currentScale + CONFIG.ScaleStep)
-    applyScale(s)
-    setStatus(("Scale: %.2f"):format(s), Color3.fromRGB(180, 220, 255))
-end)
-scaleDnBtn.MouseButton1Click:Connect(function()
-    local s = math.max(CONFIG.ScaleMin, currentScale - CONFIG.ScaleStep)
-    applyScale(s)
-    setStatus(("Scale: %.2f"):format(s), Color3.fromRGB(180, 220, 255))
-end)
-scaleRstBtn.MouseButton1Click:Connect(function()
-    applyScale(1)
-    setStatus("Scale reset.", Color3.fromRGB(160, 160, 175))
-end)
-
--- Transparency buttons
-transUpBtn.MouseButton1Click:Connect(function()
-    local t = math.max(0, currentTrans - CONFIG.TransparencyStep)
-    applyTransparency(t)
-    setStatus(("Alpha: %.1f"):format(1 - t), Color3.fromRGB(200, 200, 240))
-end)
-transDnBtn.MouseButton1Click:Connect(function()
-    local t = math.min(1, currentTrans + CONFIG.TransparencyStep)
-    applyTransparency(t)
-    setStatus(("Alpha: %.1f"):format(1 - t), Color3.fromRGB(200, 200, 240))
-end)
-transRstBtn.MouseButton1Click:Connect(function()
-    applyTransparency(0)
-    setStatus("Alpha reset.", Color3.fromRGB(160, 160, 175))
-end)
-
--- Visual toggles
+-- Visuals
 trailButton.MouseButton1Click:Connect(function()
-    trailEnabled = not trailEnabled
-    enableTrail(trailEnabled)
+    enableTrail(not trailEnabled)
     trailButton.Text = trailEnabled and "✨ Trail: ON" or "✨ Trail: OFF"
     trailButton.BackgroundColor3 = trailEnabled and Color3.fromRGB(120, 180, 250) or Color3.fromRGB(60, 90, 130)
 end)
 highlightButton.MouseButton1Click:Connect(function()
-    highlightEnabled = not highlightEnabled
-    enableHighlight(highlightEnabled)
+    enableHighlight(not highlightEnabled)
     highlightButton.Text = highlightEnabled and "🔦 Highlight: ON" or "🔦 Highlight: OFF"
     highlightButton.BackgroundColor3 = highlightEnabled and Color3.fromRGB(120, 180, 250) or Color3.fromRGB(60, 90, 130)
 end)
 nametagButton.MouseButton1Click:Connect(function()
-    nametagEnabled = not nametagEnabled
-    enableNametag(nametagEnabled)
+    enableNametag(not nametagEnabled)
     nametagButton.Text = nametagEnabled and "🏷 Nametag: ON" or "🏷 Nametag: OFF"
     nametagButton.BackgroundColor3 = nametagEnabled and Color3.fromRGB(230, 200, 120) or Color3.fromRGB(60, 90, 130)
 end)
 rainbowButton.MouseButton1Click:Connect(function()
-    rainbowActive = not rainbowActive
-    enableRainbow(rainbowActive)
+    enableRainbow(not rainbowActive)
     rainbowButton.Text = rainbowActive and "🌈 Rainbow: ON" or "🌈 Rainbow: OFF"
     rainbowButton.BackgroundColor3 = rainbowActive and Color3.fromRGB(200, 100, 220) or Color3.fromRGB(90, 60, 130)
 end)
 
--- Message
+-- Messages
 sendNowBtn.MouseButton1Click:Connect(function()
     local msg = (messageBox.Text or ""):match("^%s*(.-)%s*$")
     if msg == "" then setStatus("Type a message first.", Color3.fromRGB(220, 120, 80)); return end
@@ -1313,12 +1281,38 @@ scheduleBtn.MouseButton1Click:Connect(function()
         end
     end)
 end)
-
-closeButton.MouseButton1Click:Connect(function()
-    fullReset()
-    if currentDummy and currentDummy.Parent then currentDummy:Destroy() end
-    screenGui:Destroy()
+autoMsgBtn.MouseButton1Click:Connect(function()
+    if autoMsgActive then
+        autoMsgActive = false
+        autoMsgBtn.Text = "Auto: OFF"
+        autoMsgBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 100)
+        setStatus("Auto message OFF.", Color3.fromRGB(160, 160, 175))
+        return
+    end
+    if not currentDummy or not currentDummy.Parent then
+        setStatus("Spawn a dummy first.", Color3.fromRGB(220, 120, 80)); return
+    end
+    autoMsgActive = true
+    autoMsgBtn.Text = "Auto: ON"
+    autoMsgBtn.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
+    setStatus("Auto message ON.", Color3.fromRGB(120, 220, 160))
+    task.spawn(function()
+        while autoMsgActive do
+            local txt = autoMsgBox.Text
+            if txt ~= "" and currentDummy and currentDummy.Parent then
+                showMessage(txt, 4)
+            end
+            task.wait(8)
+        end
+    end)
 end)
+
+-- ============================================================
+-- TAB CLICK BINDINGS
+-- ============================================================
+for name, b in pairs(tabButtons) do
+    b.MouseButton1Click:Connect(function() showTab(name) end)
+end
 
 -- ============================================================
 -- MAIN LOOPS
@@ -1360,13 +1354,8 @@ RunService.Heartbeat:Connect(function()
             if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
                 part.Color = Color3.fromHSV(hue, 0.85, 1)
             end
-        end    end
-end)
-
--- Periodically refresh quick list once
-task.spawn(function()
-    task.wait(1)
-    pcall(refreshQuick)
+        end
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -1380,4 +1369,8 @@ end)
 -- INIT
 -- ============================================================
 showTab("Spawn")
+task.spawn(function()
+    task.wait(1)
+    pcall(refreshQuick)
+end)
 setStatus("MANI AVATAR SPAWNER ready. Enter a username.", Color3.fromRGB(160, 220, 180))
